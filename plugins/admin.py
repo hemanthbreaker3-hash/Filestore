@@ -58,20 +58,18 @@ async def add_admins(client: Client, message: Message):
     if not await check_owner_only(message):
         return
 
-    pro = await message.reply("<b><i>ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ..</i></b>", quote=True)
+    pro = await message.reply("<b><blockquote>⏳ Processing request... Please wait.</blockquote></b>", quote=True)
     check = 0
     admin_ids = await db.get_all_admins()
     admins = message.text.split()[1:]
 
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("ᴄʟᴏsᴇ", callback_data="close", style="danger")]])
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("✖️ Close", callback_data="close", style="danger")]])
 
     if not admins:
         return await pro.edit(
-            "<b>You need to provide user ID(s) to add as admin.</b>\n\n"
-            "<b>Usage:</b>\n"
-            "<code>/add_admin [user_id]</code> — Add one or more user IDs\n\n"
-            "<b>Example:</b>\n"
-            "<code>/add_admin 1234567890 9876543210</code>",
+            "<b><blockquote>You need to provide user ID(s) to add as admin.</blockquote></b>\n\n"
+            "<b>Usage:</b> <code>/add_admin <user_id1> [user_id2]</code>\n"
+            "<b>Example:</b> <code>/add_admin 1234567890 9876543210</code>",
             reply_markup=reply_markup
         )
 
@@ -110,11 +108,11 @@ async def delete_admins(client: Client, message: Message):
     if not await check_owner_only(message):
         return
 
-    pro = await message.reply("<b><i>ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ..</i></b>", quote=True)
+    pro = await message.reply("<b><blockquote>⏳ Processing request... Please wait.</blockquote></b>", quote=True)
     admin_ids = await db.get_all_admins()
     admins = message.text.split()[1:]
 
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("ᴄʟᴏsᴇ", callback_data="close", style="danger")]])
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("✖️ Close", callback_data="close", style="danger")]])
 
     if not admins:
         return await pro.edit(
@@ -159,15 +157,15 @@ async def get_admins(client: Client, message: Message):
     if not await check_admin_or_owner(message):
         return
 
-    pro = await message.reply("<b><i>ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ..</i></b>", quote=True)
+    pro = await message.reply("<b><blockquote>⏳ Fetching admin list...</blockquote></b>", quote=True)
     admin_ids = await db.get_all_admins()
 
     if not admin_ids:
-        admin_list = "<b><blockquote>❌ No admins found.</blockquote></b>"
+        admin_list = "<b><blockquote>❌ No additional admins added.</blockquote></b>"
     else:
-        admin_list = "\n".join(f"<b><blockquote>ID: <code>{id}</code></blockquote></b>" for id in admin_ids)
+        admin_list = "\n".join(f"<b><blockquote>• Admin ID: <code>{id}</code></blockquote></b>" for id in admin_ids)
 
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("ᴄʟᴏsᴇ", callback_data="close", style="danger")]])
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("✖️ Close", callback_data="close", style="danger")]])
     await pro.edit(f"<b>⚡ Current Admin List:</b>\n\n{admin_list}", reply_markup=reply_markup)
 
 

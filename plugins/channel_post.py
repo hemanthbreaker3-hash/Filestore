@@ -34,11 +34,10 @@ async def channel_post(client: Client, message: Message):
     reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url={link}', style="primary")]])
 
     output_text = (
-        f"<b>First Filename:</b> {first_filename}\n"
-        f"<b>First Caption:</b> {first_caption}\n"
-        f"<b>Last Filename:</b> {last_filename}\n"
-        f"<b>Last Caption:</b> {last_caption}\n\n"
-        f"<b>Here is your link:</b>\n\n"
+        f"<b><blockquote>📁 File Info:</b>\n"
+        f"• <b>Filename:</b> {first_filename}\n"
+        f"• <b>Caption:</b> {first_caption}</blockquote>\n\n"
+        f"<b>🔗 Shareable Link:</b>\n"
         f"<code>{link}</code>"
     )
 

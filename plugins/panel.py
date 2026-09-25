@@ -429,21 +429,38 @@ async def count_command(client: Client, message: Message):
     ist_tz = ZoneInfo("Asia/Kolkata")
     args = message.text.split()[1:]
     filter_date = None
+    filter_label = "All Time"
+
+    now_utc = datetime.now(timezone.utc)
+    now_ist = now_utc.astimezone(ist_tz)
 
     if args:
-        raw_date = args[0].strip()
-        for fmt in ["%d-%m-%Y", "%d/%m/%Y"]:
-            try:
-                filter_date = datetime.strptime(raw_date, fmt).date()
-                break
-            except ValueError:
-                pass
-        if not filter_date:
-            return await message.reply_text("<b>❌ Invalid date format. Use DD-MM-YYYY or DD/MM/YYYY.</b>")
+        raw_arg = args[0].strip().lower()
+        if raw_arg in ["today", "td"]:
+            filter_date = now_ist.date()
+            filter_label = f"Today ({filter_date.strftime('%d-%b-%Y')})"
+        elif raw_arg in ["yesterday", "yd"]:
+            from datetime import timedelta
+            filter_date = (now_ist - timedelta(days=1)).date()
+            filter_label = f"Yesterday ({filter_date.strftime('%d-%b-%Y')})"
+        else:
+            for fmt in ["%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d"]:
+                try:
+                    filter_date = datetime.strptime(raw_arg, fmt).date()
+                    filter_label = filter_date.strftime("%d-%b-%Y")
+                    break
+                except ValueError:
+                    pass
+            if not filter_date:
+                return await message.reply_text(
+                    "<b><blockquote>❌ Invalid date format. Use DD-MM-YYYY, DD/MM/YYYY, 'today', or 'yesterday'.</blockquote></b>"
+                )
 
     verified_users = await db.get_all_verified_users()
     report_items = []
     matched_count = 0
+    active_count = 0
+    expired_count = 0
 
     for idx, u in enumerate(verified_users, start=1):
         uid = u.get('_id')
@@ -458,6 +475,7 @@ async def count_command(client: Client, message: Message):
         ver_ist_str = "N/A"
         exp_ist_str = "N/A"
         rem_str = "Expired"
+        is_active = False
 
         if ver_at:
             if hasattr(ver_at, "tzinfo") and ver_at.tzinfo is None:
@@ -465,48 +483,61 @@ async def count_command(client: Client, message: Message):
             ver_ist = ver_at.astimezone(ist_tz)
             ver_ist_str = ver_ist.strftime("%d-%b-%Y %H:%M:%S IST")
 
+        if filter_date:
+            if not ver_at or ver_at.astimezone(ist_tz).date() != filter_date:
+                continue
+
         if exp_at:
             if hasattr(exp_at, "tzinfo") and exp_at.tzinfo is None:
                 exp_at = exp_at.replace(tzinfo=timezone.utc)
             exp_ist = exp_at.astimezone(ist_tz)
             exp_ist_str = exp_ist.strftime("%d-%b-%Y %H:%M:%S IST")
 
-            now_utc = datetime.now(timezone.utc)
             if exp_at > now_utc:
+                is_active = True
                 rem_sec = int((exp_at - now_utc).total_seconds())
                 from helper_func import get_readable_time
                 rem_str = get_readable_time(rem_sec)
 
-        if filter_date:
-            if not ver_at or ver_at.astimezone(ist_tz).date() != filter_date:
-                continue
-
         matched_count += 1
+        if is_active:
+            active_count += 1
+        else:
+            expired_count += 1
+
+        status_emoji = "🟢 Active" if is_active else "🔴 Expired"
         item = (
-            f"<b>{matched_count}. User Record:</b>\n"
-            f"• <b>First Name:</b> {fn_str}\n"
-            f"• <b>Username:</b> {u_str}\n"
-            f"• <b>User ID:</b> <code>{uid}</code>\n"
-            f"• <b>Verified Time:</b> <code>{ver_ist_str}</code>\n"
-            f"• <b>Expire Time:</b> <code>{exp_ist_str}</code>\n"
-            f"• <b>Remaining Time:</b> <code>{rem_str}</code>\n"
+            f"<b><blockquote>{matched_count}. User Record ({status_emoji}):\n"
+            f"• Name: {fn_str} | Username: {u_str}\n"
+            f"• User ID: <code>{uid}</code>\n"
+            f"• Verified: <code>{ver_ist_str}</code>\n"
+            f"• Expires: <code>{exp_ist_str}</code>\n"
+            f"• Remaining: <code>{rem_str}</code></blockquote></b>"
         )
         report_items.append(item)
 
     if not report_items:
-        date_str = f" for {filter_date.strftime('%d-%m-%Y')}" if filter_date else ""
-        return await message.reply_text(f"<b>📊 No verified users found{date_str}.</b>")
+        return await message.reply_text(
+            f"<b><blockquote>📊 No verified user records found for filter: {filter_label}.</blockquote></b>"
+        )
 
-    header = f"<b>📊 Verified Users Report ({matched_count} Total):</b>\n\n"
+    header = (
+        f"<b>📊 Verified Users Count Report</b>\n\n"
+        f"<b><blockquote>• Total Users Recorded: <code>{matched_count}</code>\n"
+        f"• Active Verified: <code>{active_count}</code>\n"
+        f"• Expired Verification: <code>{expired_count}</code>\n"
+        f"• Date Filter: <code>{filter_label}</code></blockquote></b>\n\n"
+    )
+
     parts = []
     current_part = header
 
     for item in report_items:
         if len(current_part) + len(item) > 3800:
             parts.append(current_part)
-            current_part = header + item
+            current_part = item + "\n\n"
         else:
-            current_part += item + "\n"
+            current_part += item + "\n\n"
     if current_part:
         parts.append(current_part)
 

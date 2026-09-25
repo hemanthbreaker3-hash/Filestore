@@ -67,8 +67,7 @@ async def stats(bot: Bot, message: Message):
 
 
 
-WAIT_MSG = "<b>⏳ ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ ᴀ ꜱᴇᴄᴏɴᴅ... ɪ'ᴍ ᴡᴏʀᴋɪɴɢ ᴍʏ ᴍᴀɢɪᴄ ꜰᴏʀ ʏᴏᴜ! ✨</b>"
-
+WAIT_MSG = "<b><blockquote>⏳ Processing request... Please wait a moment.</blockquote></b>"
 
 
 @Bot.on_message(filters.command('users') & filters.private)
@@ -77,10 +76,7 @@ async def get_users(client: Bot, message: Message):
         return
     msg = await client.send_message(chat_id=message.chat.id, text=WAIT_MSG)
     users = await db.full_userbase()
-    await msg.edit(f"{len(users)} users are using this bot")
-
-
-
+    await msg.edit(f"<b><blockquote>👥 Total Registered Users: <code>{len(users)}</code></blockquote></b>")
 
 
 @Bot.on_message(filters.private & filters.command('dlt_time'))
@@ -89,21 +85,18 @@ async def set_delete_time(client: Bot, message: Message):
         return
     try:
         duration = int(message.command[1])
-
         await db.set_del_timer(duration)
-
-        await message.reply(f"<b>Dᴇʟᴇᴛᴇ Tɪᴍᴇʀ ʜᴀs ʙᴇᴇɴ sᴇᴛ ᴛᴏ <blockquote>{duration} sᴇᴄᴏɴᴅs.</blockquote></b>")
+        await message.reply(f"<b><blockquote>✅ Auto-delete timer updated to <code>{duration}</code> seconds.</blockquote></b>")
 
     except (IndexError, ValueError):
-        await message.reply("<b>Pʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴠᴀʟɪᴅ ᴅᴜʀᴀᴛɪᴏɴ ɪɴ sᴇᴄᴏɴᴅs.</b> Usage: /dlt_time {duration}")
+        await message.reply("<b><blockquote>❌ Usage: <code>/dlt_time <seconds></code></blockquote></b>")
 
 @Bot.on_message(filters.private & filters.command('check_dlt_time'))
 async def check_delete_time(client: Bot, message: Message):
     if not await check_admin_or_owner(message):
         return
     duration = await db.get_del_timer()
-
-    await message.reply(f"<b><blockquote>Cᴜʀʀᴇɴᴛ ᴅᴇʟᴇᴛᴇ ᴛɪᴍᴇʀ ɪs sᴇᴛ ᴛᴏ {duration}sᴇᴄᴏɴᴅs.</blockquote></b>")
+    await message.reply(f"<b><blockquote>⏱️ Current auto-delete timer: <code>{duration}</code> seconds.</blockquote></b>")
 
 
 @Bot.on_message(filters.private & filters.command('retrieve_on'))
@@ -111,7 +104,7 @@ async def retrieve_on_command(client: Bot, message: Message):
     if not await check_admin_or_owner(message):
         return
     await db.set_retrieve_status(True)
-    await message.reply("<b><blockquote>Rᴇᴛʀɪᴇᴠᴇ Oɴ! Dᴇʟᴇᴛɪᴏɴ ᴀʟᴇʀᴛ ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ sʜᴏᴡɴ ᴀɴᴅ 'ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ' ʙᴜᴛᴛᴏɴ ᴡɪʟʟ ʙᴇ ᴀᴄᴛɪᴠᴇ. ✅</blockquote></b>")
+    await message.reply("<b><blockquote>✅ File retrieval alert enabled! 'Get File Again' button will be active after deletion.</blockquote></b>")
 
 
 @Bot.on_message(filters.private & filters.command('retrieve_off'))
@@ -119,16 +112,16 @@ async def retrieve_off_command(client: Bot, message: Message):
     if not await check_admin_or_owner(message):
         return
     await db.set_retrieve_status(False)
-    await message.reply("<b><blockquote>Rᴇᴛʀɪᴇᴠᴇ Oғғ! Dᴇʟᴇᴛɪᴏɴ ᴀʟᴇʀᴛ ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ᴇɴᴛɪʀᴇʟʏ ᴀғᴛᴇʀ ғɪʟᴇs ᴀʀᴇ ᴠᴀɴɪsʜᴇᴅ. ❌</blockquote></b>")
+    await message.reply("<b><blockquote>❌ File retrieval alert disabled! Messages will be completely deleted.</blockquote></b>")
 
 
 @Bot.on_message(filters.command('ping'))
 async def ping(bot: Bot, message: Message):
     start_time = time.time()
-    reply = await message.reply("<b>Pɪɴɢɪɴɢ...</b>")
+    reply = await message.reply("<b><blockquote>🏓 Pinging system...</blockquote></b>")
     end_time = time.time()
     latency = (end_time - start_time) * 1000
-    await reply.edit(f"<b>Pᴏɴɢ! 🏓 <blockquote>{latency:.2f}ms</blockquote></b>")
+    await reply.edit(f"<b><blockquote>🏓 Pong! Latency: <code>{latency:.2f} ms</code></blockquote></b>")
 
 # =====================================================================================##
 #                         ✨ MADE BY ANIZONEFLIX ✨

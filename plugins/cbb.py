@@ -14,25 +14,21 @@ async def cb_handler(client: Bot, query: CallbackQuery):
 
     if data == "help":
         await query.answer()
-        caption = HELP_TXT.replace("{first}", query.from_user.first_name or "") if "{first}" in HELP_TXT else HELP_TXT
-
-        reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton('ʜᴏᴍᴇ', callback_data='start', style="primary"),
-             InlineKeyboardButton("ᴄʟᴏꜱᴇ", callback_data='close', style="danger")]
-        ])
+        from plugins.help import get_help_page_content
+        text, reply_markup = get_help_page_content(1)
 
         if query.message.photo or query.message.document or query.message.video or query.message.animation:
             await query.message.edit_media(
                 media=InputMediaPhoto(
                     media=get_next_image(query.message.chat.id),
-                    caption=caption,
+                    caption=text,
                     has_spoiler=True
                 ),
                 reply_markup=reply_markup
             )
         else:
             await query.message.edit_text(
-                text=caption,
+                text=text,
                 disable_web_page_preview=True,
                 reply_markup=reply_markup
             )
@@ -40,8 +36,8 @@ async def cb_handler(client: Bot, query: CallbackQuery):
     elif data == "about":
         await query.answer()
         reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton('ʜᴏᴍᴇ', callback_data='start', style="primary"),
-             InlineKeyboardButton('ᴄʟᴏꜱᴇ', callback_data='close', style="danger")]
+            [InlineKeyboardButton('🏠 Home', callback_data='start', style="primary"),
+             InlineKeyboardButton('✖️ Close', callback_data='close', style="danger")]
         ])
 
         if query.message.photo or query.message.document or query.message.video or query.message.animation:
@@ -63,11 +59,11 @@ async def cb_handler(client: Bot, query: CallbackQuery):
     elif data == "start":
         await query.answer()
         reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton('ᴀɴɪᴍᴇꜱ', url='https://t.me/anizoneflix', style="primary"),
-             InlineKeyboardButton('ʙᴀꜱᴇ', url='https://t.me/anizoneflix', style="primary")],
-            [InlineKeyboardButton('• ᴀʙᴏᴜᴛ', callback_data='about', style="primary"),
-             InlineKeyboardButton(' ʜᴇʟᴘ •', callback_data='help', style="primary")],
-            [InlineKeyboardButton("ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ", url='https://t.me/anizoneflix', style="success")]
+            [InlineKeyboardButton('📢 Main Channel', url='https://t.me/anizoneflix', style="primary"),
+             InlineKeyboardButton('💬 Support', url='https://t.me/anizoneflix', style="primary")],
+            [InlineKeyboardButton('ℹ️ About', callback_data='about', style="primary"),
+             InlineKeyboardButton('📜 Help', callback_data='help', style="primary")],
+            [InlineKeyboardButton("🚀 Join Updates Channel", url='https://t.me/anizoneflix', style="success")]
         ])
 
         if query.message.photo or query.message.document or query.message.video or query.message.animation:

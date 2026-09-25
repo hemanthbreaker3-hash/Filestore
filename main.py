@@ -144,46 +144,38 @@ app = Flask(__name__)
 
 def is_supported_chrome_browser(user_agent: str) -> bool:
     """
-    Check if the user-agent is a Google Chrome browser.
-    Recognizes Chrome on Desktop, Mobile, iOS Chrome (CriOS), and Android WebViews / Custom Tabs.
+    Check if the user-agent belongs to a legitimate user web browser.
+    Allows Chrome, Safari, Firefox, Edge, Opera, Samsung Internet, Mobile Safari/Chrome, etc.
+    Blocks automated scrapers, headless tools, bots, crawlers, or missing User-Agents.
     """
     if not user_agent:
         return False
-    ua = user_agent.lower()
-
-    # Must contain chrome or crios
-    if "chrome" not in ua and "crios" not in ua:
-        return False
-
-    # Exclude non-Chrome browsers masquerading in UA string
-    unsupported_browsers = [
-        "edg", "edge", "opr", "opera", "firefox", "fxios",
-        "ucbrowser", "focus", "duckduckgo", "yabrowser"
-    ]
-    for b in unsupported_browsers:
-        if b in ua:
-            return False
-
-    return True
-
-def is_explicit_bot_or_scraper(user_agent: str) -> bool:
-    """
-    Check if the user-agent belongs to an explicit bot, crawler, headless scraper, or bypass script.
-    Bans are strictly reserved for these.
-    """
-    if not user_agent:
-        return True
     ua = user_agent.lower()
 
     bot_keywords = [
-        "python", "curl", "wget", "puppeteer", "selenium", "headlesschrome",
+        "python", "curl", "wget", "puppeteer", "selenium", "headless",
         "phantomjs", "bot", "crawler", "spider", "scrapy", "httpclient",
-        "requests", "axios", "postman", "go-http-client", "java/"
+        "requests", "axios", "postman", "go-http-client", "java/",
+        "libwww-perl", "golang", "aiohttp", "urllib", "httpx", "playwright"
     ]
-    for keyword in bot_keywords:
-        if keyword in ua:
-            return True
-    return False
+    for b in bot_keywords:
+        if b in ua:
+            return False
+
+    valid_tokens = [
+        "mozilla/", "chrome/", "crios", "safari/", "firefox/", "fxios",
+        "edg/", "edge/", "opr/", "opera/", "samsungbrowser/", "duckduckgo",
+        "applewebkit/", "gecko/", "trident/"
+    ]
+    return any(token in ua for token in valid_tokens)
+
+def is_legitimate_browser(user_agent: str) -> bool:
+    return is_supported_chrome_browser(user_agent)
+
+def is_explicit_bot_or_scraper(user_agent: str) -> bool:
+    if not user_agent:
+        return True
+    return not is_supported_chrome_browser(user_agent)
 
 @app.route('/')
 def hello_world():
@@ -207,9 +199,11 @@ def verify_frontend(full_token=None, subpath=None):
 
     short_st = request.args.get('st', '')
 
-    # Select random template variation (verify.html, verify_v2.html, verify_v3.html)
-    template_choices = ['verify.html', 'verify_v2.html', 'verify_v3.html']
-    selected_template = random.choice(template_choices)
+    try:
+        from templates.template_manager import get_random_verification_template
+        selected_template = get_random_verification_template()
+    except Exception:
+        selected_template = 'verify.html'
 
     try:
         return render_template(selected_template, token=token_key, short_st=short_st)
@@ -396,8 +390,8 @@ def verify_backend():
     bot_username = bot_config.get('BOT_USERNAME', '')
     bot_dest = f"https://telegram.me/{bot_username}?start=verify_{short_st}" if bot_username else "https://telegram.me/"
 
-    # Check if explicit bot or automated scraper
-    if is_explicit_bot_or_scraper(user_agent):
+    # Check if explicit bot, scraper, or non-browser request
+    if is_explicit_bot_or_scraper(user_agent) or not is_legitimate_browser(user_agent):
         if user_id > 0:
             run_async(db.add_ban_user(user_id))
             alert_text = (
@@ -405,7 +399,7 @@ def verify_backend():
                 f"• <b>User ID:</b> <code>{user_id}</code>\n"
                 f"• <b>Username:</b> @{username or 'None'}\n"
                 f"• <b>User-Agent:</b> <code>{user_agent[:150]}</code>\n"
-                f"• <b>Action Taken:</b> Banned for 1 day (24 Hours)"
+                f"• <b>Action Taken:</b> Access Blocked & User Banned"
             )
             try:
                 if TG_BOT_TOKEN and OWNER_ID:
@@ -417,11 +411,6 @@ def verify_backend():
             except Exception as notify_err:
                 print(f"Error sending bypass alert: {notify_err}")
 
-        return render_template('bypass_detected.html')
-
-    # If not explicit bot, but not Google Chrome (e.g. Firefox, Safari, Edge, Opera)
-    if not is_supported_chrome_browser(user_agent):
-        # Do NOT ban the user! Return prompt asking them to open in Chrome
         return render_template('bypass_detected.html')
 
     # Chrome browser confirmed: complete verification

@@ -364,20 +364,20 @@ def get_help_page_content(page_num: int) -> tuple:
     nav_row = []
 
     if page_num > 1:
-        nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"help_page_{page_num - 1}"))
+        nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"help_page_{page_num - 1}", style="primary"))
 
-    nav_row.append(InlineKeyboardButton(f"📜 {page_num}/{TOTAL_PAGES}", callback_data="help_page_noop"))
+    nav_row.append(InlineKeyboardButton(f"📜 {page_num}/{TOTAL_PAGES}", callback_data="help_page_noop", style="primary"))
 
     if page_num < TOTAL_PAGES:
-        nav_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"help_page_{page_num + 1}"))
+        nav_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"help_page_{page_num + 1}", style="primary"))
 
     buttons.append(nav_row)
     buttons.append([
-        InlineKeyboardButton("📢 Updates Channel", url="https://t.me/anizoneflix"),
-        InlineKeyboardButton("💬 Support", url="https://t.me/anizoneflix")
+        InlineKeyboardButton("📢 Updates Channel", url="https://t.me/anizoneflix", style="primary"),
+        InlineKeyboardButton("💬 Support", url="https://t.me/anizoneflix", style="primary")
     ])
     buttons.append([
-        InlineKeyboardButton("✖️ Close", callback_data="help_close")
+        InlineKeyboardButton("✖️ Close", callback_data="help_close", style="danger")
     ])
 
     return text, InlineKeyboardMarkup(buttons)
@@ -400,21 +400,40 @@ async def help_page_callback(client: Client, callback_query: CallbackQuery):
     page_num = int(callback_query.matches[0].group(1))
     text, reply_markup = get_help_page_content(page_num)
     await callback_query.answer()
-    try:
-        await callback_query.message.edit_caption(
-            caption=text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.HTML
-        )
-    except Exception:
+    if callback_query.message.photo or callback_query.message.document or callback_query.message.video or callback_query.message.animation:
         try:
-            await callback_query.message.edit_text(
-                text=text,
+            await callback_query.message.edit_caption(
+                caption=text,
                 reply_markup=reply_markup,
                 parse_mode=ParseMode.HTML
             )
         except Exception:
-            pass
+            try:
+                await callback_query.message.edit_text(
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True
+                )
+            except Exception:
+                pass
+    else:
+        try:
+            await callback_query.message.edit_text(
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True
+            )
+        except Exception:
+            try:
+                await callback_query.message.edit_caption(
+                    caption=text,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception:
+                pass
 
 
 @Bot.on_callback_query(filters.regex(r"^help_page_noop$"))

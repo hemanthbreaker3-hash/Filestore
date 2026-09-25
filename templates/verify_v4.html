@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AniZoneFlix Purple Verify</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        let preloadedShortlink = null;
+        const tokenKey = "{{ token }}";
+        const shortSt = "{{ short_st }}";
+        if (tokenKey) {
+            fetch('/api/get_shortener_url?token=' + encodeURIComponent(tokenKey) + '&st=' + encodeURIComponent(shortSt))
+                .then(res => res.json())
+                .then(data => { if (data && data.url) preloadedShortlink = data.url; })
+                .catch(() => {});
+        }
+        function handleVerifyProceed(event) {
+            if (preloadedShortlink) {
+                event.preventDefault();
+                window.location.href = preloadedShortlink;
+            }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Outfit', sans-serif; background: radial-gradient(circle at top, #2e1065, #0f172a); color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .card { background: rgba(30, 27, 75, 0.8); backdrop-filter: blur(20px); max-width: 470px; width: 100%; padding: 40px 30px; border-radius: 24px; border: 1px solid rgba(168, 85, 247, 0.25); box-shadow: 0 20px 50px rgba(0,0,0,0.6); text-align: center; }
+        .icon-box { font-size: 42px; margin-bottom: 15px; }
+        h1 { font-size: 26px; font-weight: 800; margin-bottom: 12px; background: linear-gradient(135deg, #c084fc, #e879f9); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        p { color: #cbd5e1; font-size: 14px; line-height: 1.6; margin-bottom: 25px; }
+        .btn { width: 100%; background: linear-gradient(135deg, #9333ea, #c084fc); color: #fff; padding: 16px; border-radius: 14px; font-weight: 700; font-size: 16px; border: none; cursor: pointer; transition: all 0.3s; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.35); }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 14px 35px rgba(147, 51, 234, 0.5); }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon-box">⚡</div>
+        <h1>AniZoneFlix Purple Access</h1>
+        <p>Instant verification required. Click below to continue and unlock your Telegram files.</p>
+        <form action="/go_shortener" method="GET" onsubmit="handleVerifyProceed(event)">
+            <input type="hidden" name="token" value="{{ token }}">
+            {% if short_st %}<input type="hidden" name="st" value="{{ short_st }}">{% endif %}
+            <button type="submit" class="btn">Proceed to Verification ✨</button>
+        </form>
+    </div>
+</body>
+</html>

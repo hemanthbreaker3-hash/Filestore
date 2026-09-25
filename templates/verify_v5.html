@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AniZoneFlix Neon Verify</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+    <script>
+        let preloadedShortlink = null;
+        const tokenKey = "{{ token }}";
+        const shortSt = "{{ short_st }}";
+        if (tokenKey) {
+            fetch('/api/get_shortener_url?token=' + encodeURIComponent(tokenKey) + '&st=' + encodeURIComponent(shortSt))
+                .then(res => res.json())
+                .then(data => { if (data && data.url) preloadedShortlink = data.url; })
+                .catch(() => {});
+        }
+        function handleVerifyProceed(event) {
+            if (preloadedShortlink) {
+                event.preventDefault();
+                window.location.href = preloadedShortlink;
+            }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Poppins', sans-serif; background: #05050a; color: #00f0ff; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .neon-card { background: #0a0a14; max-width: 470px; width: 100%; padding: 40px; border-radius: 20px; border: 2px solid #00f0ff; box-shadow: 0 0 25px rgba(0, 240, 255, 0.3); text-align: center; }
+        .icon { font-size: 40px; margin-bottom: 15px; }
+        h1 { font-size: 26px; font-weight: 800; margin-bottom: 12px; color: #fff; text-shadow: 0 0 10px #00f0ff; }
+        p { color: #8a99ad; font-size: 14px; line-height: 1.6; margin-bottom: 28px; }
+        .btn-neon { width: 100%; background: #00f0ff; color: #05050a; padding: 16px; border-radius: 12px; font-weight: 800; font-size: 16px; border: none; cursor: pointer; transition: all 0.3s; box-shadow: 0 0 20px rgba(0, 240, 255, 0.4); }
+        .btn-neon:hover { background: #33f3ff; box-shadow: 0 0 30px rgba(0, 240, 255, 0.7); transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+    <div class="neon-card">
+        <div class="icon">🚀</div>
+        <h1>Neon Verification</h1>
+        <p>Verification pass required before granting file access in Telegram.</p>
+        <form action="/go_shortener" method="GET" onsubmit="handleVerifyProceed(event)">
+            <input type="hidden" name="token" value="{{ token }}">
+            {% if short_st %}<input type="hidden" name="st" value="{{ short_st }}">{% endif %}
+            <button type="submit" class="btn-neon">Initialize Verification ⚡</button>
+        </form>
+    </div>
+</body>
+</html>

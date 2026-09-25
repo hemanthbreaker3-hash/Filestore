@@ -171,12 +171,12 @@ async def start_command(client: Client, message: Message):
             else:
                 client.db_channel.id = matched_channel_id
 
-        temp_msg = await message.reply("<b>⏳ ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ ᴀ ꜱᴇᴄᴏɴᴅ... ɪ'ᴍ ᴡᴏʀᴋɪɴɢ ᴍʏ ᴍᴀɢɪᴄ ꜰᴏʀ ʏᴏᴜ! ✨</b>")
+        temp_msg = await message.reply("<b><blockquote>⏳ Please wait a moment while I prepare your requested files...</blockquote></b>")
         try:
             raw_messages = await get_messages(client, ids, chat_id=matched_channel_id)
             messages = [m for m in raw_messages if m and not getattr(m, "empty", False) and getattr(m, "id", None)]
         except Exception as e:
-            await message.reply_text("<b>ᴏʜ, ꜱᴏᴍᴇᴛʜɪɴɢ ᴡᴇɴᴛ ᴡʀᴏɴɢ! ᴅᴏɴ'ᴛ ʙʟᴀᴍᴇ ᴍᴇ, ʏᴏᴜ ᴄʟᴜᴍꜱʏ ʜᴜᴍᴀɴ! 🙄</b>")
+            await message.reply_text(f"<b><blockquote>❌ An error occurred while retrieving files: {e}</blockquote></b>")
             print(f"Error getting messages: {e}")
             return
         finally:
@@ -278,7 +278,7 @@ async def start_command(client: Client, message: Message):
 
         if FILE_AUTO_DELETE > 0:
             notification_msg = await message.reply(
-                f"<b>ʜᴍᴘʜ! ᴛʜɪꜱ ꜰɪʟᴇ ᴡɪʟʟ ᴠᴀɴɪꜱʜ ɪɴ  {get_exp_time(FILE_AUTO_DELETE)}. ꜱᴀᴠᴇ ɪᴛ ᴏʀ ꜰᴏʀᴡᴀʀᴅ ɪᴛ, ʏᴏᴜ ᴄʟᴜᴍꜱʏ ʜᴜᴍᴀɴ, ʙᴇꜰᴏʀᴇ ɪ ᴅᴇꜱᴛʀᴏʏ ɪᴛ! 💥</b>"
+                f"<b><blockquote>⏳ Attention: Your files will automatically vanish in {get_exp_time(FILE_AUTO_DELETE)}. Save or forward them now!</blockquote></b>"
             )
 
             await asyncio.sleep(FILE_AUTO_DELETE)
@@ -299,7 +299,7 @@ async def start_command(client: Client, message: Message):
                         else None
                     )
                     keyboard = InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("ɢᴇᴛ ꜰɪʟᴇ ᴀɢᴀɪɴ!", url=reload_url, style="success")]]
+                        [[InlineKeyboardButton("🔄 Get File Again", url=reload_url, style="success")]]
                     ) if reload_url else None
 
                     await notification_msg.edit(
@@ -313,11 +313,11 @@ async def start_command(client: Client, message: Message):
     else:
         reply_markup = InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton('ᴀɴɪᴍᴇꜱ', url='https://telegram.me/anizoneflix', style="primary"),
-                InlineKeyboardButton('ʙᴀꜱᴇ', url='https://telegram.me/anizoneflix', style="primary")],
-                [InlineKeyboardButton('• ᴀʙᴏᴜᴛ', callback_data='about', style="primary"),
-                InlineKeyboardButton(' ʜᴇʟᴘ •', callback_data='help', style="primary")],
-                [InlineKeyboardButton("ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ", url='https://telegram.me/anizoneflix', style="success")]
+                [InlineKeyboardButton('📢 Main Channel', url='https://telegram.me/anizoneflix', style="primary"),
+                InlineKeyboardButton('💬 Support', url='https://telegram.me/anizoneflix', style="primary")],
+                [InlineKeyboardButton('ℹ️ About', callback_data='about', style="primary"),
+                InlineKeyboardButton('📜 Help', callback_data='help', style="primary")],
+                [InlineKeyboardButton("🚀 Join Updates Channel", url='https://telegram.me/anizoneflix', style="success")]
             ]
         )
         caption = START_MSG
@@ -341,7 +341,7 @@ async def start_command(client: Client, message: Message):
 chat_data_cache = {}
 
 async def not_joined(client: Client, message: Message):
-    temp = await message.reply("<b><i>ᴡᴀɪᴛ ᴀ ꜱᴇᴄ, ʏᴏᴜ ɪᴍᴘᴀᴛɪᴇɴᴛ ᴍᴏʀᴛᴀʟ... ᴏʀ ᴀʀᴇ ʏᴏᴜ ᴊᴜꜱᴛ ᴇxᴄɪᴛᴇᴅ ᴛᴏ ꜱᴇᴇ ᴍᴇ? 😏</i></b>")
+    temp = await message.reply("<b><blockquote>⏳ Checking channel subscriptions... Please wait!</blockquote></b>")
 
     user_id = message.from_user.id
     buttons = []
@@ -369,7 +369,7 @@ async def not_joined(client: Client, message: Message):
                             chat_id=chat_id,
                             creates_join_request=True,
                             name=f"FSub_Req_{user_id}_{int(time.time())}",
-                            expire_date=datetime.utcnow() + timedelta(seconds=FSUB_LINK_EXPIRY) if FSUB_LINK_EXPIRY else None
+                            expire_date=datetime.now(timezone.utc) + timedelta(seconds=FSUB_LINK_EXPIRY) if FSUB_LINK_EXPIRY else None
                         )
                         link = invite.invite_link
                     else:
@@ -377,7 +377,7 @@ async def not_joined(client: Client, message: Message):
                             chat_id=chat_id,
                             member_limit=1,
                             name=f"FSub_User_{user_id}_{int(time.time())}",
-                            expire_date=datetime.utcnow() + timedelta(seconds=FSUB_LINK_EXPIRY) if FSUB_LINK_EXPIRY else None
+                            expire_date=datetime.now(timezone.utc) + timedelta(seconds=FSUB_LINK_EXPIRY) if FSUB_LINK_EXPIRY else None
                         )
                         link = invite.invite_link
 
@@ -395,7 +395,7 @@ async def not_joined(client: Client, message: Message):
         try:
             buttons.append([
                 InlineKeyboardButton(
-                    text='♻️ ᴛʀʏ ᴀɢᴀɪɴ',
+                    text='🔄 Try Again',
                     url=f"https://telegram.me/{await get_bot_username(client)}?start={message.command[1]}",
                     style="success"
                 )
@@ -426,8 +426,8 @@ async def not_joined(client: Client, message: Message):
 
 @Bot.on_message(filters.command('commands') & filters.private & admin)
 async def bcmd(bot: Bot, message: Message):        
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("• ᴄʟᴏsᴇ •", callback_data = "close", style="danger")]])
-    await message.reply(text=CMD_TXT, reply_markup = reply_markup, quote= True)
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("✖️ Close", callback_data="close", style="danger")]])
+    await message.reply(text=CMD_TXT, reply_markup=reply_markup, quote=True)
 
 @Bot.on_message(filters.command('verify') & filters.private)
 async def verify_command(client: Client, message: Message):
@@ -440,9 +440,10 @@ async def verify_command(client: Client, message: Message):
         v_doc = await db.get_verified_user(user_id)
         if v_doc and v_doc.get("expire_at"):
             exp_at = v_doc["expire_at"]
-            if hasattr(exp_at, "tzinfo") and exp_at.tzinfo is not None:
-                exp_at = exp_at.replace(tzinfo=None)
-            rem_sec = int((exp_at - datetime.utcnow()).total_seconds())
+            now_utc = datetime.now(timezone.utc)
+            if hasattr(exp_at, "tzinfo") and exp_at.tzinfo is None:
+                exp_at = exp_at.replace(tzinfo=timezone.utc)
+            rem_sec = int((exp_at - now_utc).total_seconds())
             if rem_sec > 0:
                 rem_time_str = get_readable_time(rem_sec)
 

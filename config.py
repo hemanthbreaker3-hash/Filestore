@@ -31,42 +31,20 @@ TG_BOT_WORKERS = int(os.environ.get("TG_BOT_WORKERS", "200"))
 START_PIC = os.environ.get("START_PIC", "https://graph.org/file/0591ce5558c3ec8fe7612-263292508134daf3e1.jpg")
 FORCE_PIC = os.environ.get("FORCE_PIC", "https://graph.org/file/fdc4357abfaba23255e98-24d1bbfa3888cdfcfe.jpg")
 
-HELP_TXT = "<b>ʜᴜʜʜʜʜʜ!... ʜᴇʟᴘ? 😮‍💨</b>\n<b><blockquote>⚡ ᴛʜɪs ᴘʀɪᴠᴀᴛᴇ ᴘʀᴇᴍɪᴜᴍ ʙᴏᴛ ɪs ᴍʏ ᴘᴇʀsᴏɴᴀʟ ɢᴀʀᴅᴇɴ! ᴏɴʟʏ ᴍʏ ᴄʜᴏsᴇɴ ᴀᴅᴍɪɴs & ᴍʏ ᴅᴀʀʟɪɴɢs ᴄᴀɴ ᴛᴏᴜᴄʜ ɪᴛ. 🔐 ᴛᴏ sᴛᴇᴀʟ ᴀ ɢʟɪᴍᴘsᴇ ᴀɴᴅ ɢᴇᴛ ꜰɪʟᴇs, ᴊᴏɪɴ ᴍʏ ᴄʜᴀɴɴᴇʟ ᴀɴᴅ ᴀsᴋ ꜰᴏʀ ᴛʜᴇ ᴅɪʀᴇᴄᴛ ʟɪɴᴋ! 🎯 ᴛʜɪs ɪs ᴇxᴄʟᴜsɪᴠᴇʟʏ ꜰᴏʀ ʏᴏᴜ. ɢᴇᴛ ʏᴏᴜʀ ꜰɪʟᴇs sᴇᴄᴜʀᴇʟʏ, ᴀɴᴅ ᴅᴏɴ'ᴛ ᴍᴀᴋᴇ ᴍᴇ ᴡᴀɪᴛ!</blockquote></b>\n<b>• ᴊᴏɪɴ ᴍʏ ᴍᴀɪɴ ᴄʜᴀɴɴᴇʟ: @anizoneflix\nᴡᴀɴᴛ ᴍᴏʀᴇ ᴏꜰ ᴍᴇ? ᴜsᴇ /help!</b>"
+HELP_TXT = "<b>✨ AniZoneFlix Help Directory</b>\n\n<b><blockquote>Welcome to AniZoneFlix! Explore and manage files, verification settings, shorteners, clone bots, and custom commands with ease. Use the interactive menu below or type /help to browse all commands.</blockquote></b>\n\n<b>• Main Channel:</b> @anizoneflix"
 
-ABOUT_TXT = """<b>🤖 ɪꜱʜᴛᴀʀ ʙᴏᴛ - ᴀʙᴏᴜᴛ ᴍᴇ</b>
-<b><blockquote>💡 ᴍʏ ꜱᴛᴀᴛᴜꜱ: <code>ᴏɴʟɪɴᴇ ᴀɴᴅ ᴡᴀɪᴛɪɴɢ 24/7</code>
-🚀 ᴘᴏᴡᴇʀꜱ: ɪɴꜱᴛᴀɴᴛ ᴀɴɪᴍᴇ & ꜱᴇᴄʀᴇᴛ ꜰɪʟᴇꜱ.
-🔗 ᴀᴄᴄᴇꜱꜱ: ɢᴇᴛ ᴛʜᴇᴍ ᴅɪʀᴇᴄᴛʟʏ ᴛʜʀᴏᴜɢʜ ᴍʏ ꜱᴘᴇᴄɪᴀʟ ʟɪɴᴋꜱ.
-⚡ ᴜᴘᴛɪᴍᴇ: ᴀʟᴡᴀʏꜱ ᴀᴄᴛɪᴠᴇ ᴊᴜꜱᴛ ꜰᴏʀ ʏᴏᴜ.
-🌐 ᴄʜᴀɴɴᴇʟꜱ: ᴊᴏɪɴ ᴜꜱ, ᴅᴏɴ'ᴛ ʙᴇ ꜱʜʏ!</blockquote></b>
-<b><blockquote>◈ ᴄʀᴇᴀᴛᴏʀ: <a href="https://t.me/anizoneflix">Anizoneflix</a>\n◈ ꜰᴏᴜɴᴅᴇʀ: <a href="https://t.me/anizoneflix">Anizoneflix</a>\n◈ ᴅᴇᴠᴇʟᴏᴘᴇʀ: <a href="https://t.me/anizoneflix">Anizoneflix</a></blockquote></b>"""
-START_MSG = os.environ.get("START_MESSAGE", "<b>💖 ʜᴇʟʟᴏ {first}! 🥀\n<blockquote expandable>ɪ'ᴍ ɪꜱʜᴛᴀʀ ᴛʜᴇ ɢᴏᴅᴅᴇꜱꜱ ᴏꜰ ꜰᴇʀᴛɪʟɪᴛʏ ✨ ʏᴏᴜʀ ᴘᴇʀꜱᴏɴᴀʟ ᴘʟᴀʏꜰᴜʟ ɢᴏᴅᴅᴇꜱꜱ ᴏꜰ ᴀɴɪᴍᴇ & ꜰɪʟᴇ ᴀᴄᴄᴇꜱꜱ 🚀\n\nɪ ᴄᴀɴ ꜱᴀᴠᴇ ᴘʀɪᴠᴀᴛᴇ ꜰɪʟᴇꜱ ɪɴ ᴄʜᴀɴɴᴇʟꜱ🔗 & ɢɪᴠᴇ ʏᴏᴜ ᴀᴄᴄᴇꜱꜱ ᴠɪᴀ ᴀ ꜱᴘᴇᴄɪᴀʟ ʟɪɴᴋ.\n\nᴅᴏɴ'ᴛ ᴋᴇᴇᴘ ᴍᴇ ᴡᴀɪᴛɪɴɢ, ᴏʀ ɪ ᴍɪɢʜᴛ ɢᴇᴛ ʙᴏʀᴇᴅ ᴀɴᴅ ᴛᴇᴀꜱᴇ ʏᴏᴜ! 😉</blockquote>\n<blockquote>🔰 ᴄʜᴇᴄᴋ ᴏᴜᴛ ᴍʏ ᴄʜᴀɴɴᴇʟꜱ & ɢᴇᴛ ʏᴏᴜʀ ꜰɪʟᴇꜱ ɪɴꜱᴛᴀɴᴛʟʏ! 🔰</blockquote></b>")
-FORCE_MSG = os.environ.get("FORCE_SUB_MESSAGE", "<b>🚨 ᴘʟᴇᴀꜱᴇ ᴊᴏɪɴ ᴍʏ ᴄʜᴀɴɴᴇʟꜱ ꜰɪʀꜱᴛ!</b>\n<blockquote>⚡ ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ, ᴍᴀᴋᴇ ꜱᴜʀᴇ ʏᴏᴜ'ᴠᴇ ᴊᴏɪɴᴇᴅ ᴀʟʟ ᴛʜᴇ ʀᴇǫᴜɪʀᴇᴅ ᴄʜᴀɴɴᴇʟꜱ ᴍᴇɴᴛɪᴏɴᴇᴅ ʙᴇʟᴏᴡ.\nᴏɴᴄᴇ ᴅᴏɴᴇ, ᴄʟɪᴄᴋ ᴛʜᴇ <b>ᴛʀʏ ᴀɢᴀɪɴ</b> ʙᴜᴛᴛᴏɴ ᴛᴏ ᴘʀᴏᴠᴇ ʏᴏᴜʀ ʟᴏʏᴀʟᴛʏ!</blockquote>\n\n<blockquote>💡<i>ɪꜰ ʏᴏᴜ'ᴇ ꜱᴛʀᴜɢɢʟɪɴɢ ʟɪᴋᴇ ᴀ ᴄʟᴜᴍꜱʏ ʜᴜᴍᴀɴ, ᴛʏᴘᴇ <code>/help</code> ᴛᴏ ᴡᴀᴛᴄʜ ᴍʏ ᴛᴜᴛᴏʀɪᴀʟ ᴀɴᴅ ꜰɪx ɪᴛ ᴇᴀꜱɪʟʏ!</i></blockquote>")
+ABOUT_TXT = """<b>🤖 AniZoneFlix FileStore Bot — About</b>\n\n<b><blockquote>⚡ Status: Online 24/7\n🚀 Features: Direct File Access, Batch Links, Shorteners & Multi-DB Channels\n🔗 Updates Channel: @anizoneflix</blockquote></b>\n\n<b><blockquote>◈ Creator & Developer: <a href="https://t.me/anizoneflix">AniZoneFlix</a></blockquote></b>"""
+START_MSG = os.environ.get("START_MESSAGE", "<b>👋 Hello {first}!</b>\n\n<b><blockquote>Welcome to AniZoneFlix FileStore Bot! I store files securely and deliver them instantly via secure shareable links.</blockquote></b>\n\n<b><blockquote>📢 Please join our updates channel to stay informed!</blockquote></b>")
+FORCE_MSG = os.environ.get("FORCE_SUB_MESSAGE", "<b>🚨 Channel Subscription Required!</b>\n\n<b><blockquote>To access your requested files, please join our required channels listed below. Once joined, click 'Try Again' to proceed.</blockquote></b>\n\n<b><blockquote>💡 Use /help if you need assistance!</blockquote></b>")
 
-CMD_TXT = """<blockquote><b>» ᴀᴅᴍɪɴ'ꜱ ꜱᴇᴄʀᴇᴛ ᴛᴏʏꜱ:</b></blockquote>
-<b>›› /delete :</b> ᴅᴇʟᴇᴛᴇ ᴄᴏɴᴛᴇɴᴛ ғʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ
-<b>›› /dlt_time :</b> ꜱᴇᴛ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴛɪᴍᴇ
-<b>›› /check_dlt_time :</b> ᴄʜᴇᴄᴋ ᴄᴜʀʀᴇɴᴛ ᴅᴇʟᴇᴛᴇ ᴛɪᴍᴇ
-<b>›› /dbroadcast :</b> ʙʀᴏᴀᴅᴄᴀꜱᴛ ᴅᴏᴄᴜᴍᴇɴᴛ / ᴠɪᴅᴇᴏ
-<b>›› /ban :</b> ʙᴀɴ ᴀ ᴜꜱᴇʀ
-<b>›› /unban :</b> ᴜɴʙᴀɴ ᴀ ᴜꜱᴇʀ
-<b>›› /banlist :</b> ɢᴇᴛ ʟɪꜱᴛ ᴏꜰ ʙᴀɴɴᴇᴅ ᴜꜱᴇʀꜱ
-<b>›› /addchnl :</b> ᴀᴅᴅ ꜰᴏʀᴄᴇ ꜱᴜʙ ᴄʜᴀɴɴᴇʟ
-<b>›› /delchnl :</b> ʀᴇᴍᴏᴠᴇ ꜰᴏʀᴄᴇ ꜱᴜʙ ᴄʜᴀɴɴᴇʟ
-<b>›› /listchnl :</b> ᴠɪᴇᴡ ᴀᴅᴅᴇᴅ ᴄʜᴀɴɴᴇʟꜱ
-<b>›› /fsub_mode :</b> ᴛᴏɢɢʟᴇ ꜰᴏʀᴄᴇ ꜱᴜʙ ᴍᴏᴅᴇ
-<b>›› /pbroadcast :</b> ꜱᴇɴᴅ ᴘʜᴏᴛᴏ ᴛᴏ ᴀʟʟ ᴜꜱᴇʀꜱ
-<b>›› /add_admin :</b> ᴀᴅᴅ ᴀɴ ᴀᴅᴍɪɴ
-<b>›› /deladmin :</b> ʀᴇᴍᴏᴠᴇ ᴀɴ ᴀᴅᴍɪɴ
-<b>›› /admins :</b> ɢᴇᴛ ʟɪꜱᴛ ᴏꜰ ᴀᴅᴍɪɴꜱ
-"""
-CUSTOM_CAPTION = os.environ.get("CUSTOM_CAPTION", "<b>• ʙʏ @anizoneflix</b>")
-CUSTOM_DELETE_ALERT = os.environ.get("CUSTOM_DELETE_ALERT", "<b>ʏᴏᴜʀ ꜰɪʟᴇ ɪꜱ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ, ʜᴇʜᴇ! ᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ᴛᴏ ʙᴇɢ ᴍᴇ ꜰᴏʀ ɪᴛ ᴀɢᴀɪɴ 👇</b>")
+CMD_TXT = """<b><blockquote>⚙️ Admin Commands Directory:</blockquote></b>\n<b>• /delete :</b> Delete content from DB channel\n<b>• /dlt_time :</b> Set auto-delete duration\n<b>• /check_dlt_time :</b> View active auto-delete timer\n<b>• /dbroadcast :</b> Broadcast document/video to users\n<b>• /ban :</b> Ban a user\n<b>• /unban :</b> Unban a user\n<b>• /banlist :</b> List all banned users\n<b>• /addchnl :</b> Add Force Subscription channel\n<b>• /delchnl :</b> Remove Force Subscription channel\n<b>• /listchnl :</b> List Force Subscription channels\n<b>• /fsub_mode :</b> Toggle Force Subscription mode\n<b>• /pbroadcast :</b> Broadcast photo to all users\n<b>• /add_admin :</b> Add a new admin\n<b>• /deladmin :</b> Remove an admin\n<b>• /admins :</b> List active admins"""
+CUSTOM_CAPTION = os.environ.get("CUSTOM_CAPTION", "<b>• By @anizoneflix</b>")
+CUSTOM_DELETE_ALERT = os.environ.get("CUSTOM_DELETE_ALERT", "<b><blockquote>⚠️ Your file has been automatically deleted for security. Click below to request access again.</blockquote></b>")
 PROTECT_CONTENT = True if os.environ.get('PROTECT_CONTENT', "False") == "True" else False 
 DISABLE_CHANNEL_BUTTON = os.environ.get("DISABLE_CHANNEL_BUTTON", None) == 'True'
-BOT_STATS_TEXT = "<b>📊 ᴍʏ sᴛᴀᴛɪsᴛɪᴄs ʜᴇʜᴇ~:</b>\n<b>• ᴜᴘᴛɪᴍᴇ:</b> <code>{uptime}</code>\n<b>• ᴄᴘᴜ ᴜsᴀɢᴇ:</b> <code>{cpu}%</code>\n<b>• ʀᴀᴍ ᴜsᴀɢᴇ:</b> <code>{ram}%</code>\n<b>• ᴛᴏᴛᴀʟ ᴜsᴇʀs:</b> <code>{users}</code>"
-USER_REPLY_TEXT = "<b>ᴡʜᴏ ᴛᴏʟᴅ ʏᴏᴜ ᴛᴏ ᴄᴀʟʟ ᴍᴇ? ʙᴀᴋᴀ! ʏᴏᴜ ᴀʀᴇ ɴᴏᴛ ᴍʏ ꜱᴇɴᴘᴀɪ!! 🙄</b>"
-USER_ROAST_TEXT = "<b>ᴡʜᴏ ᴀʀᴇ ʏᴏᴜ ᴛᴏ ʙᴀɴ ᴀɴʏᴏɴᴇ, ʏᴏᴜ ᴄʟᴜᴍꜱʏ ᴍᴏʀᴛᴀʟ? ᴋɴᴏᴡ ʏᴏᴜʀ ᴘʟᴀᴄᴇ ꜰɪʀꜱᴛ! 💅</b>"
+BOT_STATS_TEXT = "<b>📊 AniZoneFlix Bot Statistics:</b>\n\n<b><blockquote>• Uptime: <code>{uptime}</code>\n• CPU Usage: <code>{cpu}%</code>\n• RAM Usage: <code>{ram}%</code>\n• Total Users: <code>{users}</code></blockquote></b>"
+USER_REPLY_TEXT = "<b><blockquote>⚠️ Access Denied: You do not have permission to use this command.</blockquote></b>"
+USER_ROAST_TEXT = "<b><blockquote>⚠️ Unauthorized Action: Admin privileges are required.</blockquote></b>"
 
 LOG_FILE_NAME = "filesharingbot.txt"
 
