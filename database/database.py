@@ -85,6 +85,14 @@ class Rohit:
             self.dbclient = None
             self.database = None
 
+        # In-memory performance caches
+        self._banned_users_cache = None
+        self._admins_cache = None
+        self._config_cache = None
+        self._del_timer_cache = None
+        self._fsub_channels_cache = None
+        self.ADMIN_IMAGES_CACHE = None
+
         self._init_collections()
 
     def _init_collections(self):
@@ -141,18 +149,23 @@ class Rohit:
     async def add_admin(self, admin_id: int):
         if not await self.admin_exist(admin_id):
             await self.admins_data.insert_one({'_id': admin_id})
+            self._admins_cache = None
         return True
 
     @connection_check(default_return=False)
     async def del_admin(self, admin_id: int):
         if await self.admin_exist(admin_id):
             await self.admins_data.delete_one({'_id': admin_id})
+            self._admins_cache = None
         return True
 
     @connection_check(default_return=[])
     async def get_all_admins(self):
+        if self._admins_cache is not None:
+            return list(self._admins_cache)
         users_docs = await self.admins_data.find().to_list(length=None)
         user_ids = [doc['_id'] for doc in users_docs]
+        self._admins_cache = user_ids
         return user_ids
 
 
@@ -165,18 +178,23 @@ class Rohit:
     async def add_ban_user(self, user_id: int):
         if not await self.ban_user_exist(user_id):
             await self.banned_user_data.insert_one({'_id': user_id})
+            self._banned_users_cache = None
         return True
 
     @connection_check(default_return=False)
     async def del_ban_user(self, user_id: int):
         if await self.ban_user_exist(user_id):
             await self.banned_user_data.delete_one({'_id': user_id})
+            self._banned_users_cache = None
         return True
 
     @connection_check(default_return=[])
     async def get_ban_users(self):
+        if self._banned_users_cache is not None:
+            return list(self._banned_users_cache)
         users_docs = await self.banned_user_data.find().to_list(length=None)
         user_ids = [doc['_id'] for doc in users_docs]
+        self._banned_users_cache = user_ids
         return user_ids
 
 
@@ -188,16 +206,19 @@ class Rohit:
             {'$set': {'value': int(value)}},
             upsert=True
         )
+        self._del_timer_cache = int(value)
         return True
 
     @connection_check(default_return=0)
     async def get_del_timer(self):
+        if self._del_timer_cache is not None:
+            return self._del_timer_cache
         data = await self.del_timer_data.find_one({'_id': 'del_timer'})
         if not data:
             data = await self.del_timer_data.find_one({})
-        if data:
-            return data.get('value', 0)
-        return 0
+        val = data.get('value', 0) if data else 0
+        self._del_timer_cache = val
+        return val
 
 
     @connection_check(default_return=False)
@@ -209,12 +230,14 @@ class Rohit:
     async def add_channel(self, channel_id: int):
         if not await self.channel_exist(channel_id):
             await self.fsub_data.insert_one({'_id': channel_id})
+            self._fsub_channels_cache = None
         return True
 
     @connection_check(default_return=False)
     async def rem_channel(self, channel_id: int):
         if await self.channel_exist(channel_id):
             await self.fsub_data.delete_one({'_id': channel_id})
+            self._fsub_channels_cache = None
         return True
 
     async def del_channel(self, channel_id: int):
@@ -222,8 +245,11 @@ class Rohit:
 
     @connection_check(default_return=[])
     async def show_channels(self):
+        if self._fsub_channels_cache is not None:
+            return list(self._fsub_channels_cache)
         channel_docs = await self.fsub_data.find().to_list(length=None)
         channel_ids = [doc['_id'] for doc in channel_docs]
+        self._fsub_channels_cache = channel_ids
         return channel_ids
 
     
@@ -343,8 +369,12 @@ class Rohit:
     # ==================== Dynamic Configuration & Settings Methods ====================
     @connection_check(default_return={})
     async def get_config(self):
+        if self._config_cache is not None:
+            return dict(self._config_cache)
         doc = await self.database['settings'].find_one({'_id': 'bot_config'})
-        return doc.get('data', {}) if doc and isinstance(doc.get('data'), dict) else {}
+        cfg = doc.get('data', {}) if doc and isinstance(doc.get('data'), dict) else {}
+        self._config_cache = cfg
+        return cfg
 
     @connection_check(default_return=False)
     async def update_config(self, key: str, value):
@@ -354,12 +384,17 @@ class Rohit:
                 {'$unset': {f'data.{key}': ""}},
                 upsert=True
             )
+            if self._config_cache is not None:
+                self._config_cache.pop(key, None)
         else:
             await self.database['settings'].update_one(
                 {'_id': 'bot_config'},
                 {'$set': {f'data.{key}': value}},
                 upsert=True
             )
+            if self._config_cache is None:
+                self._config_cache = {}
+            self._config_cache[key] = value
         return True
 
     @connection_check(default_return=None)

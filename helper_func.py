@@ -215,22 +215,11 @@ image_rotation_state = {}
 
 def get_next_image(chat_id: int) -> str:
     """
-    Returns an image URL configured by the admin (from database if present).
+    Returns an image URL configured by the admin (from in-memory cache if present).
     Only falls back to ISHTAR_IMAGES if no admin images are configured.
-    Maintains rotation state per chat_id.
+    Maintains rotation state per chat_id without blocking the async event loop.
     """
     admin_imgs = getattr(db, "ADMIN_IMAGES_CACHE", None)
-
-    if not admin_imgs:
-        try:
-            if hasattr(db, "dbclient") and db.dbclient and DB_NAME:
-                doc = db.dbclient[DB_NAME]['settings'].find_one({'_id': 'admin_images'})
-                if doc and isinstance(doc.get('urls'), list) and doc.get('urls'):
-                    admin_imgs = doc.get('urls')
-                    db.ADMIN_IMAGES_CACHE = admin_imgs
-        except Exception:
-            pass
-
     pool = admin_imgs if admin_imgs else ISHTAR_IMAGES
 
     state = image_rotation_state.get(chat_id, [])

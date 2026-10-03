@@ -36,8 +36,8 @@ async def start_command(client: Client, message: Message):
     banned_users = await db.get_ban_users()
     if user_id in banned_users:
         return await message.reply_text(
-            "<b>⛔️ You are Bᴀɴɴᴇᴅ from using this bot.</b>\n\n"
-            "<i>Contact support if you think this is a mistake.</i>",
+            "<b>⛔ You are banned from using this bot.</b>\n\n"
+            "<i>If you believe this is a mistake, please contact support.</i>",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Contact Support", url=BAN_SUPPORT, style="success")]]
             )
@@ -352,8 +352,6 @@ async def not_joined(client: Client, message: Message):
         for total, chat_id in enumerate(all_channels, start=1):
             mode = await db.get_channel_mode(chat_id)
 
-            await message.reply_chat_action(ChatAction.TYPING)
-
             if not await is_sub(client, user_id, chat_id):
                 try:
                     if chat_id in chat_data_cache:
@@ -383,13 +381,12 @@ async def not_joined(client: Client, message: Message):
 
                     buttons.append([InlineKeyboardButton(text=f"{name}", url=link, style="primary")])
                     count += 1
-                    await temp.edit(f"<b>{'! ' * count}</b>")
 
                 except Exception as e:
                     print(f"Error with chat {chat_id}: {e}")
                     return await temp.edit(
-                        f"<b><i>! Eʀʀᴏʀ, Cᴏɴᴛᴀᴄᴛ ᴅᴇᴠᴇʟᴏᴘᴇʀ ᴛᴏ sᴏʟᴠᴇ ᴛʜᴇ ɪssᴜᴇs @anizoneflix</i></b>\n"
-                        f"<blockquote expandable><b>Rᴇᴀsᴏɴ:</b> {e}</blockquote>"
+                        f"<b><i>! Error: Please contact support to resolve issues: @anizoneflix</i></b>\n"
+                        f"<blockquote expandable><b>Reason:</b> {e}</blockquote>"
                     )
 
         try:

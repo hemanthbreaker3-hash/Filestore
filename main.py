@@ -27,11 +27,15 @@ from hydrogram.raw import types as raw_types
 
 MAIN_LOOP = None
 
+import inspect
+
 def run_async(coro):
     """
     Executes async coroutine on main bot event loop if running, or isolated loop otherwise.
     """
     global MAIN_LOOP
+    if not inspect.iscoroutine(coro) and not inspect.isawaitable(coro):
+        return coro
     if MAIN_LOOP and MAIN_LOOP.is_running():
         future = asyncio.run_coroutine_threadsafe(coro, MAIN_LOOP)
         return future.result(timeout=10)

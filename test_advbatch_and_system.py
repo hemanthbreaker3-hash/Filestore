@@ -6,12 +6,26 @@ from helper_func import encode, decode
 from helper_func import get_readable_time
 from plugins.panel import parse_duration_string
 from plugins.hyperlink import HYPERLINK_SESSIONS
-from plugins.autobatch import parse_mixed_inputs, resolve_db_source, generate_list_link, clean_emojis_and_html, parse_metadata_universal, detect_quality, state_manager, AUTO_BATCH_QUEUES, serielbatch_command
+from plugins.autobatch import parse_count_ranges, parse_mixed_inputs, resolve_db_source, generate_list_link, clean_emojis_and_html, parse_metadata_universal, detect_quality, state_manager, AUTO_BATCH_QUEUES, serielbatch_command
 from plugins.admin import delete_content_command
 from plugins.start import start_command
 from database.database import db
 
 class TestAdvbatchAndSystem(unittest.TestCase):
+
+    def test_parse_count_ranges(self):
+        # Single count
+        self.assertEqual(parse_count_ranges("32"), [(1, 32)])
+        # Single range
+        self.assertEqual(parse_count_ranges("1-32"), [(1, 32)])
+        # Multi range
+        self.assertEqual(parse_count_ranges("1-32,33-62"), [(1, 32), (33, 62)])
+        # Multi range with spaces
+        self.assertEqual(parse_count_ranges("1-12, 13-24, 25-50"), [(1, 12), (13, 24), (25, 50)])
+        # Inverted range auto swap
+        self.assertEqual(parse_count_ranges("62-33"), [(33, 62)])
+        # All keyword
+        self.assertEqual(parse_count_ranges("all"), [(1, 999999)])
 
     def test_parse_mixed_inputs_format_a(self):
         # Format A: https://t.me/c/1234567890/100-https://t.me/c/1234567890/200

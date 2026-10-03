@@ -8,7 +8,7 @@ from helper_func import get_next_image
 
 from pyrogram.types import InputMediaPhoto
 
-@Bot.on_callback_query(filters.regex("^(help|about|start|close|rfs_ch_|rfs_toggle_|fsub_back)"))
+@Bot.on_callback_query(filters.regex("^(help|about|start|close|rfs_ch_.*|rfs_toggle_.*|fsub_back)$"))
 async def cb_handler(client: Bot, query: CallbackQuery):
     data = query.data
 

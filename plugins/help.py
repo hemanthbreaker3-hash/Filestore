@@ -399,40 +399,44 @@ async def help_command(client: Client, message: Message):
 async def help_page_callback(client: Client, callback_query: CallbackQuery):
     page_num = int(callback_query.matches[0].group(1))
     text, reply_markup = get_help_page_content(page_num)
-    await callback_query.answer()
-    if callback_query.message.photo or callback_query.message.document or callback_query.message.video or callback_query.message.animation:
+    try:
+        await callback_query.answer()
+    except Exception:
+        pass
+
+    msg = callback_query.message
+    if msg.photo or msg.document or msg.video or msg.animation:
         try:
-            await callback_query.message.edit_caption(
+            await msg.edit_caption(
                 caption=text,
                 reply_markup=reply_markup,
                 parse_mode=ParseMode.HTML
             )
-        except Exception:
-            try:
-                await callback_query.message.edit_text(
-                    text=text,
-                    reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=True
-                )
-            except Exception:
+        except Exception as e:
+            if "MESSAGE_NOT_MODIFIED" in str(e):
                 pass
+            else:
+                try:
+                    await msg.edit_media(
+                        media=InputMediaPhoto(
+                            media=get_next_image(msg.chat.id),
+                            caption=text,
+                            has_spoiler=True
+                        ),
+                        reply_markup=reply_markup
+                    )
+                except Exception:
+                    pass
     else:
         try:
-            await callback_query.message.edit_text(
+            await msg.edit_text(
                 text=text,
                 reply_markup=reply_markup,
                 parse_mode=ParseMode.HTML,
                 disable_web_page_preview=True
             )
-        except Exception:
-            try:
-                await callback_query.message.edit_caption(
-                    caption=text,
-                    reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML
-                )
-            except Exception:
+        except Exception as e:
+            if "MESSAGE_NOT_MODIFIED" not in str(e):
                 pass
 
 

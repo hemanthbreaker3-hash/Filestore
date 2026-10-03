@@ -14,6 +14,42 @@ from database.database import db
 
 # Standalone helper functions & state manager for autobatch functionality
 
+def parse_count_ranges(text):
+    """
+    Parses count/range inputs like:
+    - '13' or '25' -> [(1, 13)]
+    - '1-32' -> [(1, 32)]
+    - '1-32,33-62' -> [(1, 32), (33, 62)]
+    - '1-12, 13-24, 25-50' -> [(1, 12), (13, 24), (25, 50)]
+    - 'all', 'auto' -> [(1, 999999)]
+    """
+    if not text:
+        return [(1, 999999)]
+    cleaned = text.strip().lower()
+    if cleaned in ["all", "auto", "message", "episode", "part", "range", "."]:
+        return [(1, 999999)]
+
+    ranges = []
+    parts = [p.strip() for p in cleaned.split(',') if p.strip()]
+
+    for part in parts:
+        range_match = re.match(r"^(\d+)\s*-\s*(\d+)$", part)
+        if range_match:
+            s_val = int(range_match.group(1))
+            e_val = int(range_match.group(2))
+            if s_val > e_val:
+                s_val, e_val = e_val, s_val
+            ranges.append((s_val, e_val))
+            continue
+
+        single_match = re.match(r"^(\d+)$", part)
+        if single_match:
+            val = int(single_match.group(1))
+            ranges.append((1, val))
+            continue
+
+    return ranges if ranges else [(1, 999999)]
+
 def parse_mixed_inputs(text):
     if not text:
         return []
@@ -417,45 +453,46 @@ async def autobatch_and_advbatch(client: Client, message: Message):
         for idx, item in enumerate(validated_ranges, 1):
             range_disp = f"{item['start_id']}-{item['end_id']}"
 
-            # Step 1: Format & Count
+            # Step 1: Format & Count/Ranges
             step1_text = (
                 f"📦 <b>[Range {idx}/{len(validated_ranges)}] - Step 1/2</b>\n"
                 f"Range: <code>{range_disp}</code>\n\n"
-                f"<b>What should be used for generating the batch — episode numbers, message range, or another supported format?</b>\n\n"
-                f"<i>Send total episode/file count (e.g. <code>13</code> or <code>25</code>).</i>\n\n"
+                f"<b>How many episodes or range(s) should be processed?</b>\n\n"
+                f"<i>Examples:</i>\n"
+                f"• Single count: <code>13</code> or <code>32</code>\n"
+                f"• Episode range: <code>1-32</code>\n"
+                f"• Multiple ranges: <code>1-32,33-62</code>\n"
+                f"• Send <code>all</code> to process all available files.\n\n"
                 f"<i>Type /cancel_batch to cancel.</i>"
             )
             step1_msg = await message.reply_text(step1_text)
             last_msg_id = step1_msg.id
 
-            episode_count = 9999
+            episode_ranges = [(1, 999999)]
             while True:
                 resp = await client.listen(chat_id=message.chat.id, filters=filters.text, timeout=300)
                 if resp.id <= last_msg_id:
                     continue
                 resp_text = resp.text.strip()
-                if resp_text.lower() == "/cancel_batch":
+                if resp_text.lower() in ["/cancel_batch", "/cancel"]:
                     state_manager.clear_state(bot_user, admin_id)
                     await message.reply_text("❌ <b>Auto Batch wizard cancelled.</b>")
                     return
 
-                # Check for digit or format string
-                digits = re.findall(r'\d+', resp_text)
-                if digits:
-                    episode_count = int(digits[0])
-                    break
-                elif resp_text.lower() in ["all", "auto", "message", "episode", "part", "range"]:
-                    episode_count = 9999
+                parsed_r = parse_count_ranges(resp_text)
+                if parsed_r:
+                    episode_ranges = parsed_r
                     break
                 else:
-                    err_msg = await message.reply_text("⚠️ <b>Invalid input! Please send a number (e.g. 13) or 'all'.</b>")
+                    err_msg = await message.reply_text("⚠️ <b>Invalid input! Please send a count (e.g. 32), range (e.g. 1-32), ranges (e.g. 1-32,33-62), or 'all'.</b>")
                     last_msg_id = err_msg.id
 
             # Step 2: Anime Name
+            ranges_disp = ", ".join([f"{s}-{e}" if e < 999999 else f"{s}+" for s, e in episode_ranges])
             step2_text = (
                 f"🎬 <b>[Range {idx}/{len(validated_ranges)}] - Step 2/2</b>\n"
                 f"Range: <code>{range_disp}</code>\n"
-                f"Requested Count: <code>{episode_count if episode_count < 9999 else 'All Available'}</code>\n\n"
+                f"Episode Range(s): <code>{ranges_disp}</code>\n\n"
                 f"<b>Send the Anime Name to search across filename and file caption.</b>\n\n"
                 f"Examples:\n"
                 f"<code>Naruto</code>\nor\n<code>Naruto, Naruto Shippuden</code>\n\n"
@@ -471,7 +508,7 @@ async def autobatch_and_advbatch(client: Client, message: Message):
                 if resp_anime.id <= last_msg_id:
                     continue
                 anime_text = resp_anime.text.strip()
-                if anime_text.lower() == "/cancel_batch":
+                if anime_text.lower() in ["/cancel_batch", "/cancel"]:
                     state_manager.clear_state(bot_user, admin_id)
                     await message.reply_text("❌ <b>Auto Batch wizard cancelled.</b>")
                     return
@@ -486,7 +523,8 @@ async def autobatch_and_advbatch(client: Client, message: Message):
                 'start_id': item['start_id'],
                 'end_id': item['end_id'],
                 'bot_username': item['bot_username'],
-                'episode_count': episode_count,
+                'episode_count': episode_ranges[-1][1] if len(episode_ranges) == 1 else 999999,
+                'episode_ranges': episode_ranges,
                 'anime_names': anime_names,
                 'original_token': item['original_token']
             })
@@ -508,11 +546,12 @@ async def autobatch_and_advbatch(client: Client, message: Message):
     confirm_text = f"📋 <b>Configure {'Advanced' if is_adv else 'Regular'} Auto Batch Tasks Summary:</b>\n\n"
     for idx, conf in enumerate(configured_results, 1):
         anime_disp = ", ".join(conf['anime_names']) if conf['anime_names'] else "No Anime Filter"
-        count_disp = conf['episode_count'] if conf['episode_count'] < 9999 else 'All Available'
+        e_ranges = conf.get('episode_ranges', [(1, conf.get('episode_count', 999999))])
+        count_disp = ", ".join([f"{s}-{e}" if e < 999999 else f"Episodes {s}+" for s, e in e_ranges])
         confirm_text += (
             f"<b>{idx}. Range:</b> <code>{conf['original_token']}</code>\n"
             f"   <b>Target Bot:</b> @{conf['bot_username']}\n"
-            f"   <b>Requested Count:</b> <code>{count_disp}</code>\n"
+            f"   <b>Requested Ranges:</b> <code>{count_disp}</code>\n"
             f"   <b>Anime Filter:</b> <code>{anime_disp}</code>\n\n"
         )
 
@@ -653,12 +692,10 @@ async def run_auto_batch_scan(client, task):
                     groups[season][quality].append((num_val, num_type, m.id, caption_or_filename, filename, caption))
                     matched_count += 1
 
-                    await asyncio.sleep(0.01)
-
                 scanned_count += len(batch_ids)
 
                 now = time.time()
-                if now - last_update_time >= 3.5:
+                if now - last_update_time >= 2.5:
                     last_update_time = now
                     elapsed = now - start_time
                     speed = round(scanned_count / elapsed, 1) if elapsed > 0 else 0
@@ -679,8 +716,6 @@ async def run_auto_batch_scan(client, task):
                         f"• <b>ETA:</b> <code>{eta_str}</code>"
                     )
                     await edit_msg_safe(client, chat_id, msg_id, progress_text)
-
-                await asyncio.sleep(0.05)
 
             except FloodWait as e:
                 await asyncio.sleep(e.value)
@@ -712,6 +747,8 @@ async def run_auto_batch_scan(client, task):
         final_output_blocks = []
         total_generated_batches = 0
 
+        episode_ranges = task.get('episode_ranges') or [(1, episode_limit)]
+
         for season in sorted(groups.keys()):
             qualities_dict = groups[season]
 
@@ -725,30 +762,40 @@ async def run_auto_batch_scan(client, task):
                 if files:
                     files.sort(key=lambda x: episode_sort_key(x[0]))
 
-                    # Honor requested count limit on actual available matched files
-                    if episode_limit < len(files):
-                        files = files[:episode_limit]
+                    for (r_start, r_end) in episode_ranges:
+                        range_files = [f for f in files if (f[0] is not None and r_start <= f[0] <= r_end)]
+                        if not range_files:
+                            if r_start <= len(files):
+                                range_files = files[r_start - 1 : r_end]
 
-                    mids = [f[2] for f in files]
-                    link = await generate_list_link(target_client, cid, mids, bot_username=target_bot_username)
+                        if range_files:
+                            mids = [f[2] for f in range_files]
+                            link = await generate_list_link(target_client, cid, mids, bot_username=target_bot_username)
 
-                    first_filename = files[0][4] if len(files[0]) > 4 and files[0][4] else "N/A"
-                    first_caption = files[0][5] if len(files[0]) > 5 and files[0][5] else (files[0][3] or "N/A")
-                    last_filename = files[-1][4] if len(files[-1]) > 4 and files[-1][4] else "N/A"
-                    last_caption = files[-1][5] if len(files[-1]) > 5 and files[-1][5] else (files[-1][3] or "N/A")
+                            first_filename = range_files[0][4] if len(range_files[0]) > 4 and range_files[0][4] else "N/A"
+                            first_caption = range_files[0][5] if len(range_files[0]) > 5 and range_files[0][5] else (range_files[0][3] or "N/A")
+                            last_filename = range_files[-1][4] if len(range_files[-1]) > 4 and range_files[-1][4] else "N/A"
+                            last_caption = range_files[-1][5] if len(range_files[-1]) > 5 and range_files[-1][5] else (range_files[-1][3] or "N/A")
 
-                    block = (
-                        f"🎬 <b>Quality: {q}</b>\n"
-                        f"<b>First Filename:</b> {first_filename}\n"
-                        f"<b>First Caption:</b> {first_caption}\n"
-                        f"<b>Last Filename:</b> {last_filename}\n"
-                        f"<b>Last Caption:</b> {last_caption}\n\n"
-                        f"<b>Link:</b> <code>{link}</code>"
-                    )
-                    final_output_blocks.append(block)
-                    total_generated_batches += 1
+                            range_label = f" (Episodes {r_start}-{r_end})" if len(episode_ranges) > 1 or r_start > 1 or r_end < 999999 else ""
+
+                            block = (
+                                f"🎬 <b>Quality: {q}</b>{range_label}\n"
+                                f"<b>First Filename:</b> {first_filename}\n"
+                                f"<b>First Caption:</b> {first_caption}\n"
+                                f"<b>Last Filename:</b> {last_filename}\n"
+                                f"<b>Last Caption:</b> {last_caption}\n\n"
+                                f"<b>Link:</b> <code>{link}</code>"
+                            )
+                            final_output_blocks.append(block)
+                            total_generated_batches += 1
+                        elif is_adv:
+                            range_label = f" (Episodes {r_start}-{r_end})" if len(episode_ranges) > 1 or r_start > 1 or r_end < 999999 else ""
+                            final_output_blocks.append(f"🎬 <b>Quality: {q}</b>{range_label}\n❌ <code>NOT FOUND</code>")
                 elif is_adv:
-                    final_output_blocks.append(f"<b>🎬 Quality: {q}</b>\n❌ <code>NOT FOUND</code>")
+                    for (r_start, r_end) in episode_ranges:
+                        range_label = f" (Episodes {r_start}-{r_end})" if len(episode_ranges) > 1 or r_start > 1 or r_end < 999999 else ""
+                        final_output_blocks.append(f"🎬 <b>Quality: {q}</b>{range_label}\n❌ <code>NOT FOUND</code>")
 
         # FIFO Output Serialization
         task['status'] = 'waiting_publish'
@@ -856,6 +903,7 @@ async def auto_batch_callbacks(client: Client, query: CallbackQuery):
                 'start_id': item['start_id'],
                 'end_id': item['end_id'],
                 'episode_count': item['episode_count'],
+                'episode_ranges': item.get('episode_ranges', [(1, item['episode_count'])]),
                 'anime_names': item['anime_names'],
                 'bot_username': item['bot_username'],
                 'prompt_msg_id': prompt_msg.id,
