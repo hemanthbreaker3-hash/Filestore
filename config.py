@@ -1,14 +1,14 @@
 import os
 from os import environ, getenv
 import logging
-from dotenv import load_dotenv
-
-load_dotenv()
 from logging.handlers import RotatingFileHandler
 
-TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "8672264237:AAGEGqUMNVoDHQb6eypnvZpmNMznSp_7xFs")
-APP_ID = int(os.environ.get("APP_ID", "22266643"))
-API_HASH = os.environ.get("API_HASH", "7d0b85b4146034511b8776ed7ff99de4")
+TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
+try:
+    APP_ID = int(os.environ.get("APP_ID", "0"))
+except (TypeError, ValueError):
+    APP_ID = 0
+API_HASH = os.environ.get("API_HASH", "").strip()
 
 CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "0"))
 OWNER = os.environ.get("OWNER", "")

@@ -26,7 +26,7 @@
 
 ## Configuration
 
-Set these environment variables in your deployment platform (or in a local `.env` file):
+Set these environment variables in your **Render service → Environment** settings. The application reads configuration only from process environment variables; it does not load `.env` files or use embedded credential defaults. For local development, export the same variables in your shell before starting the app.
 
 | Variable | Required | Description |
 | --- | --- | --- |
@@ -46,6 +46,13 @@ Set these environment variables in your deployment platform (or in a local `.env
 | `CUSTOM_CAPTION` | No | Custom media caption |
 
 Do not commit real tokens, API hashes, or database credentials. Keep MongoDB network access restricted where possible.
+
+
+### Render environment variables only
+
+In Render, open the service that runs this bot, go to **Environment**, and configure `TG_BOT_TOKEN`, `APP_ID`, `API_HASH`, `DATABASE_URL`, `CHANNEL_ID`, and `OWNER_ID`. Set `DB_NAME` to the existing database name used by your current deployment. Do not change the MongoDB URI or database name unless you intend to point the bot at a different database. After saving changes, trigger a redeploy/restart.
+
+No secret values are bundled in the source. If a required credential is missing, startup validation will identify the missing setting without printing its value. The bot cannot read Render dashboard values through the dashboard; Render injects them into the running process.
 
 ## MongoDB persistence and troubleshooting
 
@@ -76,7 +83,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Export the required variables in your shell or place them in a `.env` file supported by your deployment setup, then run:
+Export the required variables in your shell, then run. The app intentionally does not read `.env` files; Render values are injected into the process environment at runtime:
 
 ```bash
 python3 main.py
@@ -94,7 +101,7 @@ The repository includes a `Dockerfile`.
 
 ```bash
 docker build -t anizoneflix-bot .
-docker run --env-file .env -p 8001:8001 anizoneflix-bot
+docker run -e TG_BOT_TOKEN -e APP_ID -e API_HASH -e DATABASE_URL -e DB_NAME -e CHANNEL_ID -e OWNER_ID -p 8001:8001 anizoneflix-bot
 ```
 
 Set `PORT` to the port your hosting platform expects. Confirm that the Flask server binds to `0.0.0.0` and that the platform health check targets the configured port.
