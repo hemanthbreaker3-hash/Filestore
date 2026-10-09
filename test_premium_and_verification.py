@@ -123,7 +123,7 @@ class TestVerifyAndCommands(unittest.IsolatedAsyncioTestCase):
                     if "get_shorteners" in str(coro):
                         return shortener_config
                     if "get_config_val" in str(coro):
-                        return "https://filestoreproby-9qm4.onrender.com"
+                        return "https://your-render-service.onrender.com"
                     if "get_config" in str(coro):
                         return {"BOT_USERNAME": "test_file_bot"}
                     return None

@@ -110,7 +110,7 @@ async def start_command(client: Client, message: Message):
                 await db.save_verify_token(full_token_key, user_id, payload, expiry_seconds=int(sess_exp))
                 await db.save_verify_token(short_token_id, user_id, payload, expiry_seconds=int(sess_exp))
 
-                base_url = await db.get_config_val("BASE_URL", "https://filestoreproby-9qm4.onrender.com")
+                base_url = await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")
                 base_url = base_url.rstrip("/")
 
                 verify_link = f"{base_url}/v/{full_token_key}?st={short_token_id}"
@@ -458,7 +458,7 @@ async def verify_command(client: Client, message: Message):
     await db.save_verify_token(full_token_key, user_id, "verify-extend", expiry_seconds=int(sess_exp))
     await db.save_verify_token(short_token_id, user_id, "verify-extend", expiry_seconds=int(sess_exp))
 
-    base_url = await db.get_config_val("BASE_URL", "https://filestoreproby-9qm4.onrender.com")
+    base_url = await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")
     base_url = base_url.rstrip("/")
 
     verify_link = f"{base_url}/v/{full_token_key}?st={short_token_id}"

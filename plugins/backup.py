@@ -20,7 +20,7 @@ async def save_backup_command(client: Client, message: Message):
         return
 
     text = (
-        "<b>📦 Filestore Database Backup & Restore Center</b>\n\n"
+        "<b>📦 AniZoneFlix Database Backup & Restore Center</b>\n\n"
         "<i>Save all bot configurations, shorteners, secondary DB channels, force-sub channels, admins, banned users, and verified users permanently into a ZIP archive, or restore from an existing backup:</i>"
     )
     await message.reply_text(text, reply_markup=build_backup_menu())
@@ -36,14 +36,14 @@ async def backup_callback_handler(client: Client, query: CallbackQuery):
         await query.answer("Generating backup ZIP archive...", show_alert=False)
         msg = await query.message.reply_text("<b>⏳ Generating MongoDB backup ZIP archive...</b>")
         try:
-            zip_path = await db.export_backup_zip("backupfilestore.zip")
+            zip_path = await db.export_backup_zip("backup_anizoneflix.zip")
             if zip_path and os.path.exists(zip_path):
                 await client.send_document(
                     chat_id=query.message.chat.id,
                     document=zip_path,
-                    file_name="backupfilestore.zip",
+                    file_name="backup_anizoneflix.zip",
                     caption=(
-                        "<b>📦 Filestore Database Backup</b>\n\n"
+                        "<b>📦 AniZoneFlix Database Backup</b>\n\n"
                         "<i>Here is your complete MongoDB backup file. Keep it safe or use it to restore on any instance.</i>"
                     ),
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Close", callback_data="close", style="danger")]])
@@ -62,7 +62,7 @@ async def backup_callback_handler(client: Client, query: CallbackQuery):
         await query.answer()
         await query.message.edit_text(
             "<b>📥 Restore Database</b>\n\n"
-            "<i>Please reply or send your <code>backupfilestore.zip</code> file now.</i>\n\n"
+            "<i>Please reply or send your <code>backup_anizoneflix.zip</code> file now.</i>\n\n"
             "<i>(Send /cancel to abort)</i>"
         )
         try:

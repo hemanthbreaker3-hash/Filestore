@@ -599,7 +599,9 @@ async def run_auto_batch_scan(client, task):
             try:
                 msgs = await get_messages(target_client, batch_ids, chat_id=cid)
                 msgs = [m for m in msgs if m]
-                msgs.sort(key=lambda m: m.id)
+                # Keep the exact order requested by the user, including descending ranges.
+                requested_order = {message_id: pos for pos, message_id in enumerate(batch_ids)}
+                msgs.sort(key=lambda m: requested_order.get(m.id, len(requested_order)))
 
                 for m in msgs:
                     if not m or m.empty:
@@ -653,7 +655,6 @@ async def run_auto_batch_scan(client, task):
                     groups[season][quality].append((num_val, num_type, m.id, caption_or_filename, filename, caption))
                     matched_count += 1
 
-                    await asyncio.sleep(0.01)
 
                 scanned_count += len(batch_ids)
 
@@ -680,7 +681,6 @@ async def run_auto_batch_scan(client, task):
                     )
                     await edit_msg_safe(client, chat_id, msg_id, progress_text)
 
-                await asyncio.sleep(0.05)
 
             except FloodWait as e:
                 await asyncio.sleep(e.value)
@@ -946,7 +946,9 @@ async def serielbatch_command(client: Client, message: Message):
         try:
             msgs = await get_messages(running_client, batch_ids, chat_id=cid)
             msgs = [m for m in msgs if m and not m.empty]
-            msgs.sort(key=lambda m: m.id)
+            # Keep the exact order requested by the user, including descending ranges.
+            requested_order = {message_id: pos for pos, message_id in enumerate(batch_ids)}
+            msgs.sort(key=lambda m: requested_order.get(m.id, len(requested_order)))
 
             for m in msgs:
                 media = getattr(m, "document", None) or getattr(m, "video", None) or getattr(m, "audio", None) or getattr(m, "animation", None) or getattr(m, "photo", None) or getattr(m, "voice", None)

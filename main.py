@@ -179,7 +179,7 @@ def is_explicit_bot_or_scraper(user_agent: str) -> bool:
 
 @app.route('/')
 def hello_world():
-    return 'ANIZONEFLIX FileStore'
+    return 'AniZoneFlix'
 
 @app.route('/v/<path:full_token>')
 @app.route('/verify')
@@ -276,7 +276,7 @@ def get_shortener_url():
         token_key = request.args.get('token', '')
         short_st = request.args.get('st', '') or token_key
 
-        base_url = run_async(db.get_config_val("BASE_URL", "https://filestoreproby-9qm4.onrender.com")).rstrip("/")
+        base_url = run_async(db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")).rstrip("/")
         verify_backend_endpoint = f"{base_url}/api/verify?st={short_st}&token={token_key}"
 
         if not token_key:
@@ -291,7 +291,8 @@ def get_shortener_url():
 
         if active_shorteners:
             candidates = active_shorteners.copy()
-            random.shuffle(candidates)
+            # Keep configured shortener priority stable; avoid random routing on each request.
+            candidates.sort(key=lambda item: str(item.get("domain", "")).lower())
 
             encoded_dest = urllib.parse.quote(verify_backend_endpoint, safe='')
 
@@ -368,7 +369,7 @@ def get_shortener_url():
         print(f"Error in /api/get_shortener_url: {err}")
         token_key = request.args.get('token', '')
         short_st = request.args.get('st', '') or token_key
-        base_url = run_async(db.get_config_val("BASE_URL", "https://filestoreproby-9qm4.onrender.com")).rstrip("/")
+        base_url = run_async(db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")).rstrip("/")
         return jsonify({"url": f"{base_url}/api/verify?st={short_st}&token={token_key}"})
 
 @app.route('/api/verify', methods=['GET', 'POST'])
@@ -431,7 +432,7 @@ def start_uptime_monitor():
             try:
                 now = time.time()
                 if not cached_url or (now - last_fetch) > 300:
-                    cached_url = run_async(db.get_config_val("BASE_URL", "https://filestoreproby-9qm4.onrender.com")).rstrip("/")
+                    cached_url = run_async(db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")).rstrip("/")
                     last_fetch = now
 
                 if cached_url:

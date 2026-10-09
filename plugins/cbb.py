@@ -185,7 +185,7 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
 
     elif data == "panel_core":
         await query.answer()
-        base_url = await db.get_config_val("BASE_URL", "https://filestoreproby-9qm4.onrender.com")
+        base_url = await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")
         owner_id = OWNER_ID
         text = (
             "<b>⚙️ Core Configuration</b>\n\n"
@@ -259,7 +259,7 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
             f"<b>• Status:</b> {status_str}\n"
             f"<b>• Verified Access Duration:</b> <code>{exp_time_str}</code> ({expire_sec}s)\n"
             f"<b>• Session Link Expiry:</b> <code>{sess_time_str}</code> ({session_sec}s)\n"
-            f"<b>• Base URL:</b> <code>{await db.get_config_val('BASE_URL', 'https://filestores.onrender.com')}</code>\n\n"
+            f"<b>• Base URL:</b> <code>{await db.get_config_val('BASE_URL', 'https://your-render-service.onrender.com')}</code>\n\n"
             "<i>Redirects unverified users through shorteners before granting file access.</i>"
         )
         return await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(btn))
@@ -290,7 +290,7 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
 
     elif data == "panel_set_base_url":
         await query.answer()
-        curr_url = await db.get_config_val("BASE_URL", "https://filestores.onrender.com")
+        curr_url = await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")
         await query.message.edit_text(
             "<b>🌐 Set / Change Base URL</b>\n\n"
             f"<b>Current Base URL:</b> <code>{curr_url}</code>\n\n"

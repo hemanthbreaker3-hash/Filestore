@@ -295,7 +295,7 @@ async def set_base_url_command(client: Client, message: Message):
         return
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        curr_url = await db.get_config_val("BASE_URL", "https://filestores.onrender.com")
+        curr_url = await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")
         return await message.reply_text(
             f"<b>Usage:</b> <code>/set_base_url <url></code>\n\n"
             f"<b>Current Base URL:</b> <code>{curr_url}</code>\n\n"

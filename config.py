@@ -24,9 +24,9 @@ if not API_HASH:
     logging.warning("API_HASH is not set!")
 if not DB_URI:
     logging.warning("DATABASE_URL is not set!")
-DB_NAME = os.environ.get("DB_NAME", "Filestore")
+DB_NAME = os.environ.get("DB_NAME", "AniZoneFlix")
 FSUB_LINK_EXPIRY = int(os.getenv("FSUB_LINK_EXPIRY", "10"))
-BAN_SUPPORT = os.environ.get("BAN_SUPPORT", "https://t.me/AniReal_Chat_Group_Asia")
+BAN_SUPPORT = os.environ.get("BAN_SUPPORT", "https://t.me/anizoneflix")
 TG_BOT_WORKERS = int(os.environ.get("TG_BOT_WORKERS", "200"))
 START_PIC = os.environ.get("START_PIC", "https://graph.org/file/0591ce5558c3ec8fe7612-263292508134daf3e1.jpg")
 FORCE_PIC = os.environ.get("FORCE_PIC", "https://graph.org/file/fdc4357abfaba23255e98-24d1bbfa3888cdfcfe.jpg")

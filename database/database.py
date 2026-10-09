@@ -42,7 +42,7 @@ def connection_check(default_return=None):
         @wraps(func)
         async def wrapper(self, *args, **kwargs):
             uri = DB_URI or os.environ.get("DATABASE_URL", "")
-            name = DB_NAME or os.environ.get("DB_NAME", "Filestore")
+            name = DB_NAME or os.environ.get("DB_NAME", "AniZoneFlix")
 
             if self.database is None and uri and name:
                 try:
@@ -737,7 +737,7 @@ class Rohit:
 
     # ==================== Backup & Restore Methods ====================
     @connection_check(default_return=None)
-    async def export_backup_zip(self, zip_filename: str = "backupfilestore.zip"):
+    async def export_backup_zip(self, zip_filename: str = "backup_anizoneflix.zip"):
         import json, zipfile, tempfile
         from bson import json_util
 
