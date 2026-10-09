@@ -1,4 +1,4 @@
-pyrofork==2.3.45 
+pyrofork==2.3.45
 TgCrypto
 pyromod==1.5
 schedule
@@ -16,3 +16,4 @@ asyncio
 git+https://github.com/hydrogram/hydrogram.git
 aiosqlite
 psutil
+python-dotenv>=1.0.0
