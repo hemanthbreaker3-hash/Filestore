@@ -32,15 +32,12 @@ def run_async(coro):
     Executes async coroutine on main bot event loop if running, or isolated loop otherwise.
     """
     global MAIN_LOOP
-    if MAIN_LOOP and MAIN_LOOP.is_running():
-        future = asyncio.run_coroutine_threadsafe(coro, MAIN_LOOP)
-        return future.result(timeout=10)
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+    if not MAIN_LOOP or not MAIN_LOOP.is_running():
+        if hasattr(coro, "close"):
+            coro.close()
+        raise RuntimeError("Bot event loop is not ready; retry the request shortly.")
+    future = asyncio.run_coroutine_threadsafe(coro, MAIN_LOOP)
+    return future.result(timeout=20)
 
 # Pyrogram module compatibility mapping
 sys.modules["pyrogram"] = hydrogram
@@ -199,16 +196,8 @@ def verify_frontend(full_token=None, subpath=None):
 
     short_st = request.args.get('st', '')
 
-    try:
-        from templates.template_manager import get_random_verification_template
-        selected_template = get_random_verification_template()
-    except Exception:
-        selected_template = 'verify.html'
-
-    try:
-        return render_template(selected_template, token=token_key, short_st=short_st)
-    except Exception:
-        return render_template('verify.html', token=token_key, short_st=short_st)
+    # One consistent, lightweight template for all users and devices.
+    return render_template('verify.html', token=token_key, short_st=short_st)
 
 @app.route('/go_shortener')
 def go_shortener():
@@ -431,7 +420,7 @@ def start_uptime_monitor():
         while True:
             try:
                 now = time.time()
-                if not cached_url or (now - last_fetch) > 300:
+                if not cached_url or (now - last_fetch) > 10:
                     cached_url = run_async(db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")).rstrip("/")
                     last_fetch = now
 

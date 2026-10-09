@@ -47,6 +47,24 @@ Set these environment variables in your deployment platform (or in a local `.env
 
 Do not commit real tokens, API hashes, or database credentials. Keep MongoDB network access restricted where possible.
 
+## MongoDB persistence and troubleshooting
+
+- Use a managed MongoDB deployment (such as MongoDB Atlas) or a MongoDB instance with persistent storage. A container's local filesystem is not a database backup.
+- Set `DATABASE_URL` to the full MongoDB connection URI and `DB_NAME` to the same database name across every restart/deployment. The default database name is `AniZoneFlix`.
+- In Atlas, create a database user, allow the deployment host in Network Access, and verify the URI includes the correct credentials and cluster. Never paste credentials into public logs or commit them to Git.
+- Do not change `DB_NAME` between deploys unless you intentionally want to use a different database. An empty-looking bot after a deploy often means it connected to a different database or cluster, not that MongoDB deleted the records.
+- Database calls from Flask are dispatched to the bot's running asyncio loop. The web server no longer creates and closes temporary event loops for MongoDB calls, avoiding Motor clients being reused across different loops.
+- If the database is unavailable, configuration writes should report failure instead of claiming that settings were saved. Check startup logs for MongoDB connection errors and confirm the database user has read/write access.
+- Back up the database before upgrading or changing cluster/database names. Do not restore a backup by deleting collections unless that replacement is intended.
+
+## Base URL configuration
+
+Set `BASE_URL` to the public HTTPS origin of the running web service, for example `https://your-service.onrender.com`, with no verification path appended. You can also update it using `/set_base_url https://your-service.onrender.com` as an authorized admin/owner. The bot verifies the value by reading it back from MongoDB before reporting success. All generated verification links use the stored value; if it is absent, the environment variable is used as the fallback. If a stale URL remains, update the database setting and check that the deployed service points to the expected `DATABASE_URL` and `DB_NAME`.
+
+## Verification template
+
+AniZoneFlix uses one shared `templates/verify.html` template for every user. It is responsive and avoids mandatory external font downloads and heavy blur effects to keep it usable on low-end phones as well as desktop devices. Other verification variants and development test files have been removed from this release.
+
 ## Run locally or on a VPS
 
 ```bash

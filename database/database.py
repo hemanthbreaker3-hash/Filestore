@@ -21,19 +21,11 @@
 import motor, asyncio
 import motor.motor_asyncio
 import time
-import pymongo, os
+import os
 from config import DB_URI, DB_NAME
 import logging
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-
-try:
-    dbclient = pymongo.MongoClient(DB_URI) if DB_URI else None
-    database = dbclient[DB_NAME] if dbclient and DB_NAME else None
-except Exception as e:
-    logging.error(f"Error connecting to Pymongo: {e}")
-    dbclient = None
-    database = None
 
 logging.basicConfig(level=logging.INFO)
 
@@ -46,7 +38,7 @@ def connection_check(default_return=None):
 
             if self.database is None and uri and name:
                 try:
-                    self.dbclient = motor.motor_asyncio.AsyncIOMotorClient(uri)
+                    self.dbclient = motor.motor_asyncio.AsyncIOMotorClient(uri, serverSelectionTimeoutMS=8000, connectTimeoutMS=8000, retryWrites=True)
                     self.database = self.dbclient[name]
                     self._init_collections()
                 except Exception as re_err:
@@ -63,7 +55,10 @@ def connection_check(default_return=None):
                 if "Event loop is closed" in err_msg or "attached to a different loop" in err_msg or "closed" in err_msg:
                     if uri and name:
                         try:
-                            self.dbclient = motor.motor_asyncio.AsyncIOMotorClient(uri)
+                            old_client = self.dbclient
+                            self.dbclient = motor.motor_asyncio.AsyncIOMotorClient(uri, serverSelectionTimeoutMS=8000, connectTimeoutMS=8000, retryWrites=True)
+                            if old_client is not None:
+                                old_client.close()
                             self.database = self.dbclient[name]
                             self._init_collections()
                             return await func(self, *args, **kwargs)
@@ -78,7 +73,7 @@ class Rohit:
 
     def __init__(self, DB_URI, DB_NAME):
         try:
-            self.dbclient = motor.motor_asyncio.AsyncIOMotorClient(DB_URI) if DB_URI else None
+            self.dbclient = motor.motor_asyncio.AsyncIOMotorClient(DB_URI, serverSelectionTimeoutMS=8000, connectTimeoutMS=8000, retryWrites=True) if DB_URI else None
             self.database = self.dbclient[DB_NAME] if self.dbclient and DB_NAME else None
         except Exception as e:
             logging.error(f"Error connecting to Motor: {e}")
@@ -348,23 +343,30 @@ class Rohit:
 
     @connection_check(default_return=False)
     async def update_config(self, key: str, value):
+        if key == 'BASE_URL' and value is not None:
+            from urllib.parse import urlsplit, urlunsplit
+            value = str(value).strip().rstrip('/')
+            if not value.startswith(('https://', 'http://')):
+                value = 'https://' + value
+            parsed = urlsplit(value)
+            if not parsed.netloc or parsed.scheme not in ('http', 'https'):
+                raise ValueError('BASE_URL must be a valid http(s) URL')
+            value = urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip('/'), '', '')).rstrip('/')
         if value is None:
-            await self.database['settings'].update_one(
-                {'_id': 'bot_config'},
-                {'$unset': {f'data.{key}': ""}},
-                upsert=True
+            result = await self.database['settings'].update_one(
+                {'_id': 'bot_config'}, {'$unset': {f'data.{key}': ""}}, upsert=True
             )
         else:
-            await self.database['settings'].update_one(
-                {'_id': 'bot_config'},
-                {'$set': {f'data.{key}': value}},
-                upsert=True
+            result = await self.database['settings'].update_one(
+                {'_id': 'bot_config'}, {'$set': {f'data.{key}': value}}, upsert=True
             )
-        return True
+        return bool(result.acknowledged)
 
     @connection_check(default_return=None)
     async def get_config_val(self, key: str, default=None):
         config = await self.get_config()
+        if key == 'BASE_URL' and not config.get(key):
+            return (os.environ.get('BASE_URL') or default)
         return config.get(key, default)
 
     # ==================== Shortener Manager ====================
@@ -773,10 +775,18 @@ class Rohit:
                     coll_name = os.path.basename(file_info.filename)[:-5]
                     content = zipf.read(file_info.filename).decode('utf-8')
                     docs = json_util.loads(content)
-                    if isinstance(docs, list):
-                        await self.database[coll_name].delete_many({})
-                        if docs:
-                            await self.database[coll_name].insert_many(docs)
+                    # Merge backup records instead of wiping the live collection.
+                    # This prevents partial/old backups from erasing newer users or settings.
+                    if isinstance(docs, list) and coll_name and not coll_name.startswith('system.'):
+                        collection = self.database[coll_name]
+                        for document in docs:
+                            if not isinstance(document, dict):
+                                continue
+                            doc_id = document.get('_id')
+                            if doc_id is None:
+                                await collection.insert_one(document)
+                            else:
+                                await collection.replace_one({'_id': doc_id}, document, upsert=True)
 
         return True
 

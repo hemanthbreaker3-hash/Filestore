@@ -308,11 +308,20 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
             if not (new_url.startswith("http://") or new_url.startswith("https://")):
                 new_url = "https://" + new_url
 
-            await db.update_config("BASE_URL", new_url)
+            from urllib.parse import urlsplit
+            new_url = new_url.rstrip("/")
+            parsed = urlsplit(new_url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                await ask_url.reply_text("<b>❌ Invalid URL.</b> Please send a valid HTTPS URL.")
+                return
+            saved = await db.update_config("BASE_URL", new_url)
+            confirmed = await db.get_config_val("BASE_URL", None)
+            if not saved or confirmed != new_url:
+                await ask_url.reply_text("<b>❌ MongoDB did not confirm the new URL. Check database connectivity and retry.</b>")
+                return
             btn = [[InlineKeyboardButton("🛡️ View Verification Panel", callback_data="panel_verify", style="primary")]]
             await ask_url.reply_text(
-                f"<b>✅ Base URL Updated Successfully!</b>\n\n"
-                f"<b>New Base URL:</b> <code>{new_url}</code>",
+                f"<b>✅ Base URL Updated and Verified</b>\n\n<blockquote><b>New Base URL:</b> <code>{new_url}</code></blockquote>",
                 reply_markup=InlineKeyboardMarkup(btn)
             )
         except Exception as e:

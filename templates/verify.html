@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AniZoneFlix • Verification</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
         let preloadedShortlink = null;
         const tokenKey = "{{ token }}";
@@ -52,8 +51,6 @@
             background: rgba(17, 18, 28, .85);
             border: 1px solid rgba(255,255,255,.10);
             box-shadow: 0 25px 70px rgba(0,0,0,.55);
-            backdrop-filter: blur(22px);
-            -webkit-backdrop-filter: blur(22px);
             overflow: hidden;
         }
         .top-line {
@@ -106,6 +103,15 @@
         .btn:hover { transform: translateY(-2px); box-shadow: 0 14px 35px rgba(229,9,20,.35); }
         .footer { margin-top: 20px; text-align: center; color: #666874; font-size: 10px; }
         .footer b { color: #92939e; }
+        @media (max-width: 480px) {
+            body { padding: 12px; }
+            .card { padding: 26px 18px 22px; border-radius: 18px; }
+            h1 { font-size: 23px; }
+            .status { width: 60px; height: 60px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+        }
     </style>
 </head>
 <body>

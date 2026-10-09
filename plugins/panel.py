@@ -301,15 +301,21 @@ async def set_base_url_command(client: Client, message: Message):
             f"<b>Current Base URL:</b> <code>{curr_url}</code>\n\n"
             "<i>Example:</i> <code>/set_base_url https://mybot.onrender.com</code>"
         )
-    new_url = args[1].strip()
-    if not (new_url.startswith("http://") or new_url.startswith("https://")):
+    from urllib.parse import urlsplit
+    new_url = args[1].strip().rstrip("/")
+    if not new_url.startswith(("http://", "https://")):
         new_url = "https://" + new_url
-
-    await db.update_config("BASE_URL", new_url)
+    parsed = urlsplit(new_url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return await message.reply_text("<b>❌ Invalid URL.</b> Send a valid HTTPS URL, such as <code>https://your-service.onrender.com</code>.")
+    new_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}".rstrip("/")
+    saved = await db.update_config("BASE_URL", new_url)
+    confirmed = await db.get_config_val("BASE_URL", None)
+    if not saved or confirmed != new_url:
+        return await message.reply_text("<b>❌ Base URL was not saved.</b> Check MongoDB connectivity and try again.")
     btn = [[InlineKeyboardButton("🛡️ Verification Panel", callback_data="panel_verify", style="primary")]]
     await message.reply_text(
-        f"<b>✅ Base URL Updated Successfully!</b>\n\n"
-        f"<b>New Base URL:</b> <code>{new_url}</code>",
+        f"<b>✅ Base URL Updated and Verified</b>\n\n<blockquote><b>New Base URL:</b> <code>{new_url}</code></blockquote>",
         reply_markup=InlineKeyboardMarkup(btn)
     )
 
