@@ -1,14 +1,14 @@
 import os
 from os import environ, getenv
 import logging
+from dotenv import load_dotenv
+
+load_dotenv()
 from logging.handlers import RotatingFileHandler
 
-TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
-try:
-    APP_ID = int(os.environ.get("APP_ID", "0"))
-except (TypeError, ValueError):
-    APP_ID = 0
-API_HASH = os.environ.get("API_HASH", "").strip()
+TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "8672264237:AAGEGqUMNVoDHQb6eypnvZpmNMznSp_7xFs")
+APP_ID = int(os.environ.get("APP_ID", "22266643"))
+API_HASH = os.environ.get("API_HASH", "7d0b85b4146034511b8776ed7ff99de4")
 
 CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "0"))
 OWNER = os.environ.get("OWNER", "")
@@ -24,9 +24,9 @@ if not API_HASH:
     logging.warning("API_HASH is not set!")
 if not DB_URI:
     logging.warning("DATABASE_URL is not set!")
-DB_NAME = os.environ.get("DB_NAME", "AniZoneFlix")
+DB_NAME = os.environ.get("DB_NAME", "Filestore")
 FSUB_LINK_EXPIRY = int(os.getenv("FSUB_LINK_EXPIRY", "10"))
-BAN_SUPPORT = os.environ.get("BAN_SUPPORT", "https://t.me/anizoneflix")
+BAN_SUPPORT = os.environ.get("BAN_SUPPORT", "https://t.me/AniReal_Chat_Group_Asia")
 TG_BOT_WORKERS = int(os.environ.get("TG_BOT_WORKERS", "200"))
 START_PIC = os.environ.get("START_PIC", "https://graph.org/file/0591ce5558c3ec8fe7612-263292508134daf3e1.jpg")
 FORCE_PIC = os.environ.get("FORCE_PIC", "https://graph.org/file/fdc4357abfaba23255e98-24d1bbfa3888cdfcfe.jpg")
