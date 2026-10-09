@@ -85,7 +85,7 @@ python3 main.py
 To run tests:
 
 ```bash
-python3 -m unittest discover -s . -p 'test_*.py'
+Run the bot's startup checks and verify MongoDB connectivity before deployment.
 ```
 
 ## Deploy with Docker

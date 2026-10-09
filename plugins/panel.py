@@ -74,8 +74,8 @@ async def start_all_clones(main_client: Client):
 
                 # Send test message to clone bot's own DB channel upon startup
                 try:
-                    test_msg = await clone_app.send_message(chat_id=clone_app.db_channel.id, text="Clone DB Test Message")
-                    await test_msg.delete()
+                    probe_msg = await clone_app.send_message(chat_id=clone_app.db_channel.id, text="Clone DB Test Message")
+                    await probe_msg.delete()
                 except Exception as db_err:
                     print(f"Clone bot @{username} failed to write to DB channel {channel_id}: {db_err}")
 
