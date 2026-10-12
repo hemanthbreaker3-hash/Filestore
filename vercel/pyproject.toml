@@ -1,3 +1,12 @@
+[project]
+name = "filestore-vercel-site"
+version = "1.0.0"
+description = "Vercel serverless website and Render backend proxy"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "flask>=3.0,<4",
+  "python-dotenv>=1.0,<2",
+]
+
 [tool.vercel]
-# Vercel's Python runtime needs an explicit Flask application entrypoint.
 entrypoint = "api.proxy:app"

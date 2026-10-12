@@ -9,7 +9,7 @@ This directory contains the **website deployment only**. Keep the Telegram bot a
 3. In **Root Directory**, choose `vercel` and save. Keep the Root Directory set to `vercel` for this configuration.
 4. Add Environment Variable `RENDER_BACKEND_URL` = your Render web-service origin, e.g. `https://your-service.onrender.com` (no trailing slash).
 5. Optional: set `BASE_URL` to your stable Vercel production domain, e.g. `https://your-project.vercel.app`. Leave it unset to use Vercel's `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL` when rewriting proxied API responses.
-6. The included `pyproject.toml` explicitly points Vercel to the Flask entrypoint `api.proxy:app`, fixing the “No Flask entrypoint found” build error.
+6. The included `pyproject.toml` contains a valid PEP 621 `[project]` table (required by Vercel/uv) and explicitly points Vercel to the Flask entrypoint `api.proxy:app`. `.python-version` pins Python 3.12.
 7. Deploy. The homepage is static; `/v/...`, `/verify`, `/link/...`, `/go_shortener`, and `/api/...` are proxied to Render.
 
 ## Vercel environment / config.py
