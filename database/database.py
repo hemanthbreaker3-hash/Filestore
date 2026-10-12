@@ -456,9 +456,16 @@ class Rohit:
     # ==================== Verification Session Token Store ====================
     @connection_check(default_return=False)
     async def save_verify_token(self, token: str, user_id: int, payload: str, expiry_seconds: int = 0):
+        now = datetime.utcnow()
+        expiry = max(60, int(expiry_seconds or 3000))
         await self.database['verify_tokens'].update_one(
             {'_id': token},
-            {'$set': {'user_id': user_id, 'payload': payload, 'created_at': datetime.utcnow(), 'verified': False}},
+            {'$set': {
+                'user_id': int(user_id), 'payload': payload, 'created_at': now,
+                'expires_at': now + timedelta(seconds=expiry), 'verified': False,
+                'cached_shortlink': None, 'selected_shortener_id': None,
+                'web_verified': False
+            }},
             upsert=True
         )
         return True
@@ -474,18 +481,26 @@ class Rohit:
                 doc = None
 
         if doc:
-            # Check single-use: if already verified, token is invalid
+            # The browser step and Telegram deep-link step are one flow. Do not
+            # invalidate a token until the user returns to Telegram; enforce the
+            # configured session expiry on every request.
             if doc.get('verified', False):
                 return None
-
-            # Check expiration: token valid for 10 minutes (600s) from creation
-            created_at = doc.get('created_at')
-            if created_at:
-                if hasattr(created_at, 'tzinfo') and created_at.tzinfo is not None:
-                    created_at = created_at.replace(tzinfo=None)
-                if (datetime.utcnow() - created_at).total_seconds() > 600:
+            now = datetime.utcnow()
+            expires_at = doc.get('expires_at')
+            if expires_at:
+                if getattr(expires_at, 'tzinfo', None) is not None:
+                    expires_at = expires_at.replace(tzinfo=None)
+                if now > expires_at:
                     return None
-
+            else:
+                created_at = doc.get('created_at')
+                if created_at:
+                    if getattr(created_at, 'tzinfo', None) is not None:
+                        created_at = created_at.replace(tzinfo=None)
+                    # Legacy records retain the previous ten-minute lifetime.
+                    if (now - created_at).total_seconds() > 600:
+                        return None
             return doc
 
         # Fallback decode self-contained token format so Render cold starts/restarts never fail with 404/expired
@@ -535,6 +550,11 @@ class Rohit:
             pass
 
         return None
+
+    @connection_check(default_return=False)
+    async def update_verify_token(self, token: str, updates: dict):
+        result = await self.database['verify_tokens'].update_one({'_id': token}, {'$set': updates})
+        return bool(result.acknowledged)
 
     @connection_check(default_return=False)
     async def mark_verify_token_used(self, token: str):

@@ -57,7 +57,10 @@ async def start_command(client: Client, message: Message):
     if len(message.text.split()) > 1 and message.text.split()[1].startswith("verify_"):
         token = message.text.split()[1].split("verify_", 1)[1]
         token_doc = await db.get_verify_token(token)
-        if token_doc:
+        if token_doc and int(token_doc.get('user_id') or 0) == int(user_id):
+            # The browser must complete its shortener step before the Telegram deep link.
+            if not token_doc.get('web_verified', False):
+                return await message.reply_text("<b>❌ Verification is not complete yet.</b> Please finish the browser verification first.")
             expire_sec = await db.get_config_val("VERIFY_EXPIRE_SECONDS", 86400)
             await db.set_user_verified(
                 user_id,
@@ -97,23 +100,15 @@ async def start_command(client: Client, message: Message):
                 payload = message.text.split(maxsplit=1)[1]
                 hex_payload = payload.encode().hex()
 
-                token_uid = f"__________{user_id}_sb_{uuid.uuid4()}__________"
-                long_random_buf = secrets.token_urlsafe(4096)
-                long_payload_token = f"{hex_payload}.{long_random_buf}"
-
-                full_token_key = f"{token_uid}/{long_payload_token}"
-
-                # Base64 urlsafe start parameter mapping for Telegram deep link (strictly <= 64 chars)
+                # Telegram start parameters are limited to 64 characters. Use one
+                # cryptographically random URL-safe token for the complete flow.
                 short_token_id = secrets.token_urlsafe(24)
-
                 sess_exp = await db.get_config_val("SESSION_EXPIRE_SECONDS", 3000)
-                await db.save_verify_token(full_token_key, user_id, payload, expiry_seconds=int(sess_exp))
                 await db.save_verify_token(short_token_id, user_id, payload, expiry_seconds=int(sess_exp))
 
                 base_url = await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")
                 base_url = base_url.rstrip("/")
-
-                verify_link = f"{base_url}/v/{full_token_key}?st={short_token_id}"
+                verify_link = f"{base_url}/v/{short_token_id}?st={short_token_id}"
 
                 btn = [[InlineKeyboardButton("🚀 Verify Access Now", url=verify_link, style="primary")]]
                 return await message.reply_text(
@@ -447,21 +442,14 @@ async def verify_command(client: Client, message: Message):
             if rem_sec > 0:
                 rem_time_str = get_readable_time(rem_sec)
 
-    token_uid = f"__________{user_id}_sb_{uuid.uuid4()}__________"
-    hex_payload = "verify-extend".encode().hex()
-    long_random_buf = secrets.token_urlsafe(4096)
-    full_token_key = f"{token_uid}/{hex_payload}.{long_random_buf}"
-
+    # Keep verification/extension links short enough for Telegram start params.
     short_token_id = secrets.token_urlsafe(24)
-
     sess_exp = await db.get_config_val("SESSION_EXPIRE_SECONDS", 3000)
-    await db.save_verify_token(full_token_key, user_id, "verify-extend", expiry_seconds=int(sess_exp))
     await db.save_verify_token(short_token_id, user_id, "verify-extend", expiry_seconds=int(sess_exp))
 
     base_url = await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")
     base_url = base_url.rstrip("/")
-
-    verify_link = f"{base_url}/v/{full_token_key}?st={short_token_id}"
+    verify_link = f"{base_url}/v/{short_token_id}?st={short_token_id}"
 
     btn = [[InlineKeyboardButton("🚀 Verify / Extend Access Now", url=verify_link, style="primary")]]
     status_text = f"🟢 Currently Verified (Remaining: <code>{rem_time_str}</code>)" if is_ver else "🔴 Not Verified"

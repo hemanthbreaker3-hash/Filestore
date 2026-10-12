@@ -1,1 +1,1 @@
-"""Vercel API functions."""
+"""Vercel serverless API package."""

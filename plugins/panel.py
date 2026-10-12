@@ -26,6 +26,7 @@ def build_panel_menu():
         [InlineKeyboardButton("🛡️ Verification", callback_data="panel_verify", style="primary"), InlineKeyboardButton("🔗 Shorteners", callback_data="panel_shortener", style="primary")],
         [InlineKeyboardButton("🤖 Clone Bots", callback_data="panel_clones", style="primary"), InlineKeyboardButton("🖼️ Images", callback_data="panel_images", style="primary")],
         [InlineKeyboardButton("🔘 Custom Button", callback_data="panel_custom_btn", style="primary"), InlineKeyboardButton("📊 Statistics", callback_data="panel_stats", style="primary")],
+        [InlineKeyboardButton("🧭 Referer Settings", callback_data="panel_referrer", style="primary")],
         [InlineKeyboardButton("🔄 Restart & Sync", callback_data="panel_sync", style="success"), InlineKeyboardButton("❌ Close", callback_data="close", style="danger")]
     ]
     return InlineKeyboardMarkup(buttons)

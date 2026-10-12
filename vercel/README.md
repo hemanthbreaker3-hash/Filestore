@@ -1,36 +1,35 @@
-# Vercel website + Render bot (same repository)
+# Vercel website + Render bot deployment
 
-This directory contains the **website deployment only**. Keep the Telegram bot and its database/event loop on Render. The Vercel site serves a polished landing page and proxies verification/API routes to Render, so verification remains backed by the running bot.
+This folder is the **website/proxy only**. The Telegram bot, MongoDB operations, and verification logic continue running in the repository root on Render. Do not run the bot process on Vercel.
 
-## Deploy on Vercel
+## Vercel setup
 
-1. Push this repository to GitHub/GitLab.
-2. In Vercel, **Add New → Project** and import the same repository.
-3. In **Root Directory**, choose `vercel` and save. Keep the Root Directory set to `vercel` for this configuration.
-4. Add Environment Variable `RENDER_BACKEND_URL` = your Render web-service origin, e.g. `https://your-service.onrender.com` (no trailing slash).
-5. Optional: set `BASE_URL` to your stable Vercel production domain, e.g. `https://your-project.vercel.app`. Leave it unset to use Vercel's `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL` when rewriting proxied API responses.
-6. The included `pyproject.toml` contains a valid PEP 621 `[project]` table (required by Vercel/uv) and explicitly points Vercel to the Flask entrypoint `api.proxy:app`. `.python-version` pins Python 3.12.
-7. Deploy. The homepage is static; `/v/...`, `/verify`, `/link/...`, `/go_shortener`, and `/api/...` are proxied to Render.
+1. Push the complete repository to GitHub.
+2. Import the repository in Vercel and set **Root Directory** to `vercel`.
+3. Vercel should detect the Python project from `pyproject.toml`. It declares `api.proxy:app` and the Flask/requests dependencies.
+4. Add `RENDER_BACKEND_URL` in Vercel → Settings → Environment Variables. Use the actual public HTTPS URL of your Render web service, e.g. `https://your-service.onrender.com` (no trailing slash).
+5. Optional: set `SITE_NAME` and `TELEGRAM_BOT_USERNAME`.
+6. Deploy. Check `/healthz` on the Vercel domain; `backend_configured` should be `true`.
 
-## Vercel environment / config.py
+## Render setup
 
-Environment variables take precedence. For local-only testing you may fill `vercel/.env` or `vercel/config.py`; `.env` is gitignored and should never contain credentials in a public commit. On Vercel, use Project Settings → Environment Variables. Required: `RENDER_BACKEND_URL`. Optional: `BASE_URL`, `SITE_NAME`.
+Deploy from the **repository root**, not `vercel/`. Keep the existing bot start command/worker setup and configure the root application's required environment variables (`TG_BOT_TOKEN`, `APP_ID`, `API_HASH`, `DATABASE_URL`, and any other settings used by your deployment).
 
-## Configure Render bot base URL
+Set the bot/database `BASE_URL` to the stable Vercel production domain, e.g. `https://your-project.vercel.app`. This is the public origin used in verification links. Vercel cannot set Render's environment variables automatically; set it once in Render or update the existing database setting through the bot's supported admin mechanism.
 
-1. Keep the bot service deployed from the repository root (not the `vercel` directory).
-2. In Render → your bot Web Service → Environment, set `BASE_URL` to the Vercel production URL, for example `https://your-project.vercel.app`.
-3. If a `BASE_URL` is already stored in MongoDB, it takes precedence over the environment fallback. Update it through the bot's authorized `/set_base_url https://your-project.vercel.app` command, or clear/change the stored setting, then restart/redeploy Render.
-4. Check `https://your-project.vercel.app/` and test a real `/v/<token>` verification link.
+## Configuration priority
 
-Vercel assigns a deployment URL automatically, but a separate Render process cannot discover a new Vercel domain by itself. Use the stable Vercel production domain in Render's `BASE_URL`/bot setting once. This avoids links pointing at the Render hostname while using Vercel as the public website.
+- Vercel production: Vercel Environment Variables take priority. `vercel/.env` is a local-development example and should not be used for production secrets.
+- Render bot: configure credentials in Render Environment Variables. Root `config.py` loads a local root `.env` if present but does not override already-set environment variables.
+- Never commit actual Telegram tokens, API hashes, database URIs, or shortener API keys.
 
-## Render environment variables
+## Routes
 
-Configure the bot's existing required values in Render: `TG_BOT_TOKEN`, `APP_ID`, `API_HASH`, `DATABASE_URL`, `CHANNEL_ID`, and `OWNER_ID`. Keep `DB_NAME` the same as your current production database. Set `BASE_URL=https://your-project.vercel.app` for verification links. Do not copy bot credentials into Vercel; Vercel only needs `RENDER_BACKEND_URL` and optionally `BASE_URL`.
+The Vercel app serves a lightweight home page and forwards verification-related routes to the configured Render backend. The proxy only targets the configured HTTPS backend; it does not accept an arbitrary destination URL.
 
-## Notes
+## Troubleshooting
 
-- The Vercel and Render deployments can use the same repository with different Root Directories/start commands.
-- Do not deploy the Telegram bot process on Vercel: serverless functions are not a persistent bot worker and do not share Render's in-memory asyncio loop.
-- This setup cannot guarantee “100% deploy success” across provider/account/runtime changes. Always inspect the Vercel build log and Render runtime log after deployment.
+- `No Flask entrypoint found`: keep Vercel Root Directory set to `vercel`; ensure `pyproject.toml` contains `[project]` and `[tool.vercel] entrypoint = "api.proxy:app"`.
+- `Backend is not configured`: add `RENDER_BACKEND_URL` and redeploy.
+- `502 Backend temporarily unavailable`: check that the Render service is live and its public URL is correct.
+- If the verification URL generated by the bot points to Render instead of Vercel, set the database's `BASE_URL` to the stable Vercel production domain.

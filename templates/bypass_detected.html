@@ -21,11 +21,11 @@
     <div class="card">
         <span class="badge">🚫 Security Notice</span>
         <h2>BYPASS DETECTED</h2>
-        <p>An automated bot, headless scraper, or unauthorized tool was detected. Access has been restricted and temporarily banned for 1 day.</p>
+        <p>{{ reason or "The required verification/referrer check failed. Access has not been granted." }}</p>
         <div class="notice-box">
             <ul>
                 <li>Please use a standard web browser (Chrome, Safari, Firefox, Edge).</li>
-                <li>Disable any automated bypass extensions or scripts.</li>
+                <li>Complete verification by opening the link from Telegram and following the configured shortener.</li>
                 <li>Try again directly from your Telegram application.</li>
             </ul>
         </div>

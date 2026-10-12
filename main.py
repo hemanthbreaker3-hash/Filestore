@@ -190,7 +190,12 @@ def verify_frontend(full_token=None, subpath=None):
     if not token_key:
         return 'Invalid or missing verification token.', 400
 
-    token_doc = run_async(db.get_verify_token(token_key))
+    try:
+        token_doc = run_async(db.get_verify_token(token_key))
+    except Exception as err:
+        app.logger.exception("Verification frontend could not access the bot/database event loop")
+        return ('Verification service is starting or temporarily unavailable. '
+                'Please wait a few seconds and reopen this link.'), 503
     if not token_doc:
         return 'Verification link expired or invalid.', 403
 
@@ -205,212 +210,152 @@ def go_shortener():
     if not token_key:
         return 'Missing verification token.', 400
 
-    token_doc = run_async(db.get_verify_token(token_key))
+    try:
+        token_doc = run_async(db.get_verify_token(token_key))
+    except Exception:
+        app.logger.exception("Shortener redirect could not access the bot/database event loop")
+        return ('Verification service is starting or temporarily unavailable. '
+                'Please wait a few seconds and retry.'), 503
     if not token_doc:
         return 'Verification link expired or invalid.', 403
 
     short_st = request.args.get('st', '') or token_key
 
-    # Return HTML page displaying "Redirecting, please wait..." with animated dots
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Redirecting...</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-        body {{ font-family: 'Poppins', sans-serif; background: radial-gradient(circle at top, #1f1c2c, #090a0f); color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }}
-        .card {{ background: rgba(26, 26, 38, 0.9); backdrop-filter: blur(12px); max-width: 480px; width: 100%; padding: 40px 30px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 10px 40px rgba(0,0,0,0.6); text-align: center; }}
-        .spinner {{ width: 50px; height: 50px; border: 4px solid rgba(255,255,255,0.1); border-top-color: #e50914; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 25px auto; }}
-        @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-        h2 {{ font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 10px; }}
-        p {{ color: #b3b3b3; font-size: 14px; line-height: 1.6; }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="spinner"></div>
-        <h2>Redirecting, please wait<span id="dots">.</span></h2>
-        <p>Generating your shortlink... Please do not close or refresh this page.</p>
-    </div>
-    <script>
-        const dotsElement = document.getElementById('dots');
-        let dotCount = 1;
-        setInterval(() => {{
-            dotCount++;
-            dotsElement.textContent = '.'.repeat(dotCount);
-        }}, 400);
-
-        fetch('/api/get_shortener_url?token={token_key}&st={short_st}')
-            .then(res => res.json())
-            .then(data => {{
-                if (data && data.url) {{
-                    window.location.href = data.url;
-                }} else {{
-                    window.location.href = '/api/verify?st={short_st}&token={token_key}';
-                }}
-            }})
-            .catch(() => {{
-                window.location.href = '/api/verify?st={short_st}&token={token_key}';
-            }});
-    </script>
-</body>
-</html>"""
+    # Keep this status page intentionally static: no spinner, no animated dots,
+    # and no repeated/continuous animation. The API pre-generates/caches the link.
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Redirecting</title><style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#090a0f;color:#fff;font:16px Arial,sans-serif}}main{{text-align:center;padding:28px;border-radius:16px;background:#191a24}}p{{color:#c4c4cc}}</style></head><body><main><h2>Redirecting, please wait</h2><p>Preparing your verification link.</p></main><script>fetch('/api/get_shortener_url?'+new URLSearchParams({{token:{json.dumps(token_key)},st:{json.dumps(short_st)}}})).then(r=>r.json()).then(d=>{{if(d&&d.url)location.replace(d.url);else{{document.querySelector('main p').textContent='Unable to generate a verification link. Please return to Telegram and try again.';}}}}).catch(()=>{{document.querySelector('main p').textContent='Verification service unavailable. Please return to Telegram and try again.';}})</script></body></html>"""
 
 @app.route('/api/get_shortener_url')
 def get_shortener_url():
     try:
-        token_key = request.args.get('token', '')
-        short_st = request.args.get('st', '') or token_key
-
-        base_url = run_async(db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")).rstrip("/")
-        verify_backend_endpoint = f"{base_url}/api/verify?st={short_st}&token={token_key}"
-
+        token_key = (request.args.get('token') or '').strip()
+        short_st = (request.args.get('st') or token_key).strip()
+        base_url = str(run_async(db.get_config_val('BASE_URL', 'https://your-render-service.onrender.com'))).rstrip('/')
+        verify_endpoint = base_url + '/api/verify?' + urllib.parse.urlencode({'token': token_key, 'st': short_st})
         if not token_key:
-            return jsonify({"url": verify_backend_endpoint})
-
+            return jsonify({'error': 'missing token'}), 400
         token_doc = run_async(db.get_verify_token(token_key))
         if not token_doc:
-            return jsonify({"url": verify_backend_endpoint})
+            return jsonify({'error': 'invalid or expired token'}), 403
 
-        shorteners = run_async(db.get_shorteners())
-        active_shorteners = [s for s in shorteners if s.get('enabled', True) and s.get('domain') and s.get('api_key')]
+        cached = token_doc.get('cached_shortlink')
+        if cached and token_doc.get('selected_shortener_id'):
+            return jsonify({'url': cached})
 
-        if active_shorteners:
-            candidates = active_shorteners.copy()
-            # Keep configured shortener priority stable; avoid random routing on each request.
-            candidates.sort(key=lambda item: str(item.get("domain", "")).lower())
-
-            encoded_dest = urllib.parse.quote(verify_backend_endpoint, safe='')
-
-            def _fetch_shortener(active_shortener):
-                domain = active_shortener.get('domain', '').strip().rstrip('/')
-                api_key = active_shortener.get('api_key', '').strip()
-                if not domain or not api_key:
-                    return None
-
-                if not domain.startswith("http://") and not domain.startswith("https://"):
-                    domain = "https://" + domain
-
-                endpoints = []
-                if "?" in domain:
-                    if "url=" in domain:
-                        api_url = domain
-                    elif "api=" in domain:
-                        api_url = f"{domain}&url={encoded_dest}"
-                    else:
-                        api_url = f"{domain}&api={api_key}&url={encoded_dest}"
-                    endpoints.append(api_url)
-                elif "/st" in domain or "/api" in domain:
-                    endpoints.append(f"{domain}?api={api_key}&url={encoded_dest}")
+        shorteners = run_async(db.get_shorteners()) or []
+        active = [item for item in shorteners if item.get('enabled', True) and item.get('domain') and item.get('api_key')]
+        # Randomly select one configured active shortener per verification token.
+        random.shuffle(active)
+        for shortener in active:
+            domain = str(shortener.get('domain', '')).strip().rstrip('/')
+            api_key = str(shortener.get('api_key', '')).strip()
+            if not domain or not api_key:
+                continue
+            if not domain.startswith(('http://', 'https://')):
+                domain = 'https://' + domain
+            parsed_domain = urllib.parse.urlsplit(domain)
+            if parsed_domain.scheme not in ('http', 'https') or not parsed_domain.hostname:
+                continue
+            destination = base_url + '/api/verify?' + urllib.parse.urlencode({
+                'token': token_key, 'st': short_st, 'sid': str(shortener.get('_id', ''))
+            })
+            encoded_dest = urllib.parse.quote(destination, safe='')
+            endpoints = []
+            if '?' in domain:
+                if 'url=' in domain:
+                    endpoints.append(domain)
+                elif 'api=' in domain:
+                    endpoints.append(f'{domain}&url={encoded_dest}')
                 else:
-                    endpoints.append(f"{domain}/st?api={api_key}&url={encoded_dest}")
-                    endpoints.append(f"{domain}/api?api={api_key}&url={encoded_dest}")
-                    endpoints.append(f"{domain}?api={api_key}&url={encoded_dest}")
-
-                for api_url in endpoints:
+                    endpoints.append(f'{domain}&api={urllib.parse.quote(api_key, safe="")}&url={encoded_dest}')
+            elif '/st' in domain or '/api' in domain:
+                endpoints.append(f'{domain}?api={urllib.parse.quote(api_key, safe="")}&url={encoded_dest}')
+            else:
+                endpoints.extend([
+                    f'{domain}/st?api={urllib.parse.quote(api_key, safe="")}&url={encoded_dest}',
+                    f'{domain}/api?api={urllib.parse.quote(api_key, safe="")}&url={encoded_dest}',
+                    f'{domain}?api={urllib.parse.quote(api_key, safe="")}&url={encoded_dest}'
+                ])
+            for api_url in endpoints:
+                try:
+                    response = requests.get(api_url, timeout=8, allow_redirects=False)
                     try:
-                        res = requests.get(api_url, timeout=10.0)
+                        data = response.json()
+                    except Exception:
                         data = None
-                        try:
-                            data = res.json()
-                        except Exception:
-                            try:
-                                data = json.loads(res.text)
-                            except Exception:
-                                data = None
-
-                        short_url = None
-                        if isinstance(data, dict):
-                            short_url = (
-                                data.get("shortenedUrl") or
-                                data.get("url") or
-                                data.get("shortlink") or
-                                data.get("result") or
-                                data.get("link") or
-                                data.get("short_url") or
-                                (data.get("data", {}).get("url") if isinstance(data.get("data"), dict) else None) or
-                                (data.get("data", {}).get("shortenedUrl") if isinstance(data.get("data"), dict) else None)
-                            )
-                        elif isinstance(res.text, str) and res.text.strip().startswith("http"):
-                            short_url = res.text.strip()
-
-                        if short_url and str(short_url).strip().startswith("http"):
-                            return str(short_url).replace("\\/", "/").strip()
-                    except Exception:
-                        pass
-                return None
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(candidates)) as executor:
-                futures = [executor.submit(_fetch_shortener, s) for s in candidates]
-                for future in concurrent.futures.as_completed(futures):
-                    try:
-                        result_url = future.result()
-                        if result_url:
-                            return jsonify({"url": result_url})
-                    except Exception:
-                        pass
-
-        return jsonify({"url": verify_backend_endpoint})
+                    short_url = None
+                    if isinstance(data, dict):
+                        nested = data.get('data') if isinstance(data.get('data'), dict) else {}
+                        short_url = (data.get('shortenedUrl') or data.get('url') or data.get('shortlink') or data.get('result') or data.get('link') or data.get('short_url') or nested.get('url') or nested.get('shortenedUrl'))
+                    elif response.text.strip().startswith(('http://', 'https://')):
+                        short_url = response.text.strip()
+                    if not short_url:
+                        continue
+                    parsed_short = urllib.parse.urlsplit(str(short_url).strip().replace('\\/', '/'))
+                    if parsed_short.scheme not in ('http', 'https') or not parsed_short.hostname:
+                        continue
+                    short_url = urllib.parse.urlunsplit(parsed_short)
+                    run_async(db.update_verify_token(token_key, {
+                        'cached_shortlink': short_url,
+                        'selected_shortener_id': str(shortener.get('_id', ''))
+                    }))
+                    return jsonify({'url': short_url})
+                except Exception as exc:
+                    print(f'Shortener request failed for {parsed_domain.hostname}: {type(exc).__name__}')
+        # If no shortener works, do not pretend a shortener verification succeeded.
+        return jsonify({'error': 'No configured shortener could generate a link'}), 502
     except Exception as err:
-        print(f"Error in /api/get_shortener_url: {err}")
-        token_key = request.args.get('token', '')
-        short_st = request.args.get('st', '') or token_key
-        base_url = run_async(db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")).rstrip("/")
-        return jsonify({"url": f"{base_url}/api/verify?st={short_st}&token={token_key}"})
+        print(f'Error in /api/get_shortener_url: {type(err).__name__}: {err}')
+        return jsonify({'error': 'verification service temporarily unavailable'}), 503
 
 @app.route('/api/verify', methods=['GET', 'POST'])
 def verify_backend():
-    token_key = request.values.get('token', '') or request.values.get('st', '')
-    short_st = request.values.get('st', token_key)
-
+    """Validate shortener return, grant timed access, then send user back to Telegram."""
+    token_key = (request.values.get('token') or '').strip()
+    short_st = (request.values.get('st') or token_key).strip()
+    sid = (request.values.get('sid') or '').strip()
+    if not token_key:
+        token_key = short_st
+    if not token_key:
+        return 'Invalid or missing verification token. Please reopen the link from Telegram.', 400
     user_agent = request.headers.get('User-Agent', '')
-
-    # Identify user from token
-    user_id = 0
-    username = ""
-    token_doc = run_async(db.get_verify_token(token_key)) if token_key else None
-    if token_doc:
-        user_id = token_doc.get('user_id', 0)
-        username = token_doc.get('username', '')
-
-    bot_config = run_async(db.get_config())
-    bot_username = bot_config.get('BOT_USERNAME', '')
-    bot_dest = f"https://telegram.me/{bot_username}?start=verify_{short_st}" if bot_username else "https://telegram.me/"
-
-    # Check if explicit bot, scraper, or non-browser request
-    if is_explicit_bot_or_scraper(user_agent) or not is_legitimate_browser(user_agent):
+    try:
+        token_doc = run_async(db.get_verify_token(token_key))
+        if not token_doc:
+            return 'This verification link has expired or is invalid. Please request a new link from Telegram.', 403
+        user_id = int(token_doc.get('user_id') or 0)
+        username = token_doc.get('username') or ''
+        # A selected shortener can independently require its HTTP Referer header.
+        selected_id = str(token_doc.get('selected_shortener_id') or sid)
+        if selected_id:
+            configured = run_async(db.get_shorteners()) or []
+            selected = next((item for item in configured if str(item.get('_id')) == selected_id), None)
+            if selected and selected.get('referer_enabled', False):
+                referer = request.headers.get('Referer', '')
+                referer_host = (urllib.parse.urlsplit(referer).hostname or '').lower()
+                configured_domain = str(selected.get('domain', '')).strip()
+                if not configured_domain.startswith(('http://', 'https://')):
+                    configured_domain = 'https://' + configured_domain
+                configured_host = (urllib.parse.urlsplit(configured_domain).hostname or '').lower()
+                # Browsers and shorteners may omit Referer; strict mode intentionally rejects that.
+                if not referer_host or not configured_host or (referer_host != configured_host and not referer_host.endswith('.' + configured_host)):
+                    return render_template('bypass_detected.html', reason='Required shortener referrer was missing or invalid.'), 403
+        if is_explicit_bot_or_scraper(user_agent):
+            # Do not ban based on User-Agent alone; it is spoofable and creates false positives.
+            return render_template('bypass_detected.html', reason='Please open this verification link in a normal browser.'), 403
+        bot_config = run_async(db.get_config()) or {}
+        bot_username = str(bot_config.get('BOT_USERNAME') or '').lstrip('@')
+        bot_dest = f'https://t.me/{bot_username}?start=verify_{token_key}' if bot_username else 'https://t.me/'
+        expire_sec = int(run_async(db.get_config_val('VERIFY_EXPIRE_SECONDS', 86400)) or 86400)
         if user_id > 0:
-            run_async(db.add_ban_user(user_id))
-            alert_text = (
-                f"<b>🚨 BYPASS BOT DETECTED — ADMIN ALERT</b>\n\n"
-                f"• <b>User ID:</b> <code>{user_id}</code>\n"
-                f"• <b>Username:</b> @{username or 'None'}\n"
-                f"• <b>User-Agent:</b> <code>{user_agent[:150]}</code>\n"
-                f"• <b>Action Taken:</b> Access Blocked & User Banned"
-            )
-            try:
-                if TG_BOT_TOKEN and OWNER_ID:
-                    requests.post(
-                        f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
-                        json={"chat_id": OWNER_ID, "text": alert_text, "parse_mode": "HTML"},
-                        timeout=3
-                    )
-            except Exception as notify_err:
-                print(f"Error sending bypass alert: {notify_err}")
+            run_async(db.set_user_verified(user_id, duration_seconds=expire_sec))
+            run_async(db.update_verify_token(token_key, {'web_verified': True}))
+        return render_template('verify_success.html', redirect_url=bot_dest, animation_url='https://files.catbox.moe/5scyd0.gif')
+    except Exception as err:
+        print(f'Verification backend failed for token {token_key[:8]}…: {type(err).__name__}: {err}')
+        return ('Verification could not be completed because the service is temporarily unavailable. '
+                'Please return to Telegram and request a new link if this continues.'), 503
 
-        return render_template('bypass_detected.html')
-
-    # Chrome browser confirmed: complete verification
-    if user_id > 0:
-        expire_sec = run_async(db.get_config_val("VERIFY_EXPIRE_SECONDS", 86400))
-        run_async(db.set_user_verified(user_id, duration_seconds=int(expire_sec)))
-        if token_key:
-            run_async(db.mark_verify_token_used(token_key))
-
-    return render_template('verify_success.html', redirect_url=bot_dest)
 
 def start_uptime_monitor():
     def _monitor_loop():

@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
 
-# Vercel website local secrets
-vercel/.env
-vercel/__pycache__/
+# Environment files may contain deployment secrets
+.env
+**/.env

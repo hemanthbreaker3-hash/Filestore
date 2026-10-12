@@ -90,11 +90,25 @@ class Bot(Client):
         self.LOGGER = LOGGER
 
     async def start(self):
+        # Flask is started from main.py as __main__, while this method may also
+        # import the same file under the module name "main". Keep the event-loop
+        # reference synchronized in both module objects so Flask worker threads
+        # can submit database coroutines to the bot's actual running loop.
+        loop = asyncio.get_running_loop()
         try:
-            import main
-            main.MAIN_LOOP = asyncio.get_running_loop()
-        except Exception:
-            pass
+            import sys
+            entry_module = sys.modules.get("__main__")
+            if entry_module is not None and hasattr(entry_module, "MAIN_LOOP"):
+                entry_module.MAIN_LOOP = loop
+            import main as main_module
+            main_module.MAIN_LOOP = loop
+        except Exception as exc:
+            try:
+                self.LOGGER(__name__).warning(
+                    f"Could not synchronize verification event loop: {type(exc).__name__}: {exc}"
+                )
+            except Exception:
+                pass
         await super().start()
         usr_bot_me = await self.get_me()
         self.uptime = datetime.now()

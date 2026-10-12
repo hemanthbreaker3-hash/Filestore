@@ -119,10 +119,6 @@ Set `PORT` to the port your hosting platform expects. Confirm that the Flask ser
 
 Free hosting plans may sleep, restart, or have resource limits; no deployment guide can guarantee uninterrupted uptime on every provider or plan.
 
-## Deploy website on Vercel (separate directory)
-
-The `vercel/` directory is a separate website deployment target. Import the same repository in Vercel and set **Root Directory** to `vercel`; configure `RENDER_BACKEND_URL` to the Render web-service URL. The Telegram bot must continue running on Render. Follow [`vercel/README.md`](vercel/README.md) for Vercel and Render environment variables and public base URL setup.
-
 ## Troubleshooting
 
 - **Bot does not start:** check `TG_BOT_TOKEN`, `APP_ID`, `API_HASH`, and startup logs.

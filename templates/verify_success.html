@@ -20,13 +20,13 @@
     <div class="card">
         <span class="badge">🎉 Success!</span>
         <h2>Verification Complete</h2>
-        <p>Your access has been successfully unlocked. Click below to return to Telegram and get your files instantly!</p>
+        <img src="{{ animation_url }}" alt="Redirecting" style="display:block;max-width:220px;width:100%;height:auto;margin:0 auto 18px;border-radius:12px"><p>Verification complete. Redirecting to Telegram, please wait.</p>
         {% if redirect_url %}
             <a href="{{ redirect_url }}" class="btn">🚀 Return to Telegram & Get Files</a>
             <script>
                 setTimeout(function() {
                     window.location.href = "{{ redirect_url }}";
-                }, 1500);
+                }, 2500);
             </script>
         {% endif %}
     </div>

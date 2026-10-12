@@ -412,6 +412,21 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
         except Exception as e:
             await query.message.reply_text(f"<b>❌ Invalid duration or error:</b> <code>{e}</code>")
 
+    elif data == "panel_referrer":
+        await query.answer()
+        shorteners = await db.get_shorteners() or []
+        buttons = []
+        if shorteners:
+            text = "<b>🧭 Shortener Referrer Protection</b>\n\nToggle referrer enforcement independently for each configured shortener. When enabled, the verification return must include a matching Referer header. Some shorteners/browsers suppress this header, so test each provider before enabling.\n\n"
+            for item in shorteners:
+                enabled = bool(item.get('referer_enabled', False))
+                text += f"• <b>{item.get('domain', 'Unknown')}</b>: {'🟢 ON' if enabled else '🔴 OFF'}\n"
+                buttons.append([InlineKeyboardButton(f"{'🟢 Disable' if enabled else '🔴 Enable'} — {item.get('domain', 'Shortener')}", callback_data=f"panel_toggle_ref_{item['_id']}", style="success" if not enabled else "danger")])
+        else:
+            text = "<b>🧭 Shortener Referrer Protection</b>\n\n<i>No shorteners configured yet. Add one with /addshortener.</i>"
+        buttons.append([InlineKeyboardButton("‹ Back", callback_data="panel_main", style="primary")])
+        return await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
     elif data == "panel_shortener":
         await query.answer()
         shorteners = await db.get_shorteners()
@@ -419,7 +434,11 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
         if shorteners:
             text = "<b>🔗 Shortener Manager</b>\n\n<b>Active Shorteners:</b>\n"
             for s in shorteners:
-                text += f"• <b>{s['domain']}</b> | Key: <code>{s['api_key'][:4]}***</code>\n"
+                is_enabled = bool(s.get('enabled', True))
+                text += f"• <b>{s['domain']}</b> | {'🟢 Enabled' if is_enabled else '🔴 Disabled'} | Key: <code>{s['api_key'][:4]}***</code>\n"
+                buttons.append([InlineKeyboardButton(f"{'🔴 Turn OFF' if is_enabled else '🟢 Turn ON'} — {s['domain']}", callback_data=f"panel_toggle_short_{s['_id']}", style="danger" if is_enabled else "success")])
+                ref_on = bool(s.get('referer_enabled', False))
+                buttons.append([InlineKeyboardButton(f"🧭 Referrer: {'ON' if ref_on else 'OFF'} — {s['domain']}", callback_data=f"panel_toggle_ref_{s['_id']}", style="success" if ref_on else "primary")])
                 buttons.append([InlineKeyboardButton(f"🗑️ Delete {s['domain']}", callback_data=f"panel_del_short_{s['_id']}", style="danger")])
         else:
             text = "<b>🔗 Shortener Manager</b>\n\n<i>No shorteners configured. Use /addshortener to add one.</i>"
@@ -616,6 +635,32 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
         await db.rem_channel(cid)
         await query.answer("Force Sub channel removed!", show_alert=True)
         query.data = "panel_fsub"
+        return await panel_callback_handler(client, query)
+
+    elif data.startswith("panel_toggle_short_"):
+        sid = data[len("panel_toggle_short_"):]
+        shorteners = await db.get_shorteners() or []
+        selected = next((item for item in shorteners if str(item.get('_id')) == sid), None)
+        if not selected:
+            await query.answer("Shortener not found", show_alert=True)
+            return
+        new_value = not bool(selected.get('enabled', True))
+        await db.update_shortener(sid, {'enabled': new_value})
+        await query.answer(f"{selected.get('domain', 'Shortener')} {'enabled' if new_value else 'disabled'}", show_alert=True)
+        query.data = "panel_shortener"
+        return await panel_callback_handler(client, query)
+
+    elif data.startswith("panel_toggle_ref_"):
+        sid = data[len("panel_toggle_ref_"):]
+        shorteners = await db.get_shorteners() or []
+        selected = next((item for item in shorteners if str(item.get('_id')) == sid), None)
+        if not selected:
+            await query.answer("Shortener not found", show_alert=True)
+            return
+        new_value = not bool(selected.get('referer_enabled', False))
+        await db.update_shortener(sid, {'referer_enabled': new_value})
+        await query.answer(f"Referrer check {'enabled' if new_value else 'disabled'}", show_alert=True)
+        query.data = "panel_referrer"
         return await panel_callback_handler(client, query)
 
     elif data.startswith("panel_del_short_"):

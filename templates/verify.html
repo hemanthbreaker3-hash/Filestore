@@ -6,8 +6,8 @@
     <title>AniZoneFlix • Verification</title>
     <script>
         let preloadedShortlink = null;
-        const tokenKey = "{{ token }}";
-        const shortSt = "{{ short_st }}";
+        const tokenKey = {{ token|tojson }};
+        const shortSt = {{ short_st|tojson }};
         if (tokenKey) {
             fetch('/api/get_shortener_url?token=' + encodeURIComponent(tokenKey) + '&st=' + encodeURIComponent(shortSt))
                 .then(res => res.json())
@@ -127,7 +127,7 @@
             </div>
             <div class="status">🔐</div>
             <h1>Verify Your Access</h1>
-            <p class="subtitle">Complete the quick verification process to unlock your requested files instantly.</p>
+            <p class="subtitle">Click below to confirm your verification and continue to the requested files.</p>
             <div class="steps">
                 <div class="step active"><div class="step-number">1</div>Verify</div>
                 <div class="connector"></div>
@@ -149,7 +149,7 @@
             <form action="/go_shortener" method="GET" onsubmit="handleVerifyProceed(event)">
                 <input type="hidden" name="token" value="{{ token }}">
                 {% if short_st %}<input type="hidden" name="st" value="{{ short_st }}">{% endif %}
-                <button type="submit" class="btn">🚀 Proceed to Verification</button>
+                <button type="submit" class="btn">Click here to confirm</button>
             </form>
             <div class="footer">Protected by <b>AniZoneFlix Security System</b></div>
         </div>
