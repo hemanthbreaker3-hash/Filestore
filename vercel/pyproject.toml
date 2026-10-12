@@ -1,0 +1,3 @@
+[tool.vercel]
+# Vercel's Python runtime needs an explicit Flask application entrypoint.
+entrypoint = "api.proxy:app"
