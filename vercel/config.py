@@ -12,4 +12,4 @@ def setting(name, default=""):
 
 # Safe defaults; set RENDER_BACKEND_URL to the deployed Render web-service origin.
 SITE_NAME = "AniZoneFlix FileStore"
-RENDER_BACKEND_URL = "https://filestore-2-35dz.onrender.com"
+RENDER_BACKEND_URL = "https://filestore-2-ltvv.onrender.com"
