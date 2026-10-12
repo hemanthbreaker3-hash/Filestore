@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+
+# Vercel website local secrets
+vercel/.env
+vercel/__pycache__/

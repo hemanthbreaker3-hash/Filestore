@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "functions": { "api/proxy.py": { "maxDuration": 30 } },
+  "rewrites": [
+    { "source": "/v/:path*", "destination": "/api/proxy?path=v/:path*" },
+    { "source": "/verify", "destination": "/api/proxy?path=verify" },
+    { "source": "/link/:path*", "destination": "/api/proxy?path=link/:path*" },
+    { "source": "/go_shortener", "destination": "/api/proxy?path=go_shortener" },
+    { "source": "/api/:path*", "destination": "/api/proxy?path=api/:path*" }
+  ]
+}
