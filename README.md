@@ -135,3 +135,12 @@ Free hosting plans may sleep, restart, or have resource limits; no deployment gu
 - Handle: **@anizoneflix**
 
 Use this branding for project-facing messages and documentation. Keep technical filenames and third-party dependency names unchanged where renaming them would break compatibility.
+
+## Force-sub Telegram 400 / admin diagnostics
+
+- Run `/fsubcheck` in the bot's private chat as the configured owner/admin. It reports the exact running bot ID, each force-sub chat ID, Telegram-reported bot role, and API errors.
+- When adding a channel with `/addchnl`, the bot now checks membership using its resolved numeric bot ID instead of the special `"me"` peer and displays actionable Telegram errors.
+- Membership-check API failures are logged with chat ID, user ID, exception type, and message rather than being silently swallowed.
+
+**Important:** a bot's ID in your app database (or your user ID in the bot's `/admins` list) does not grant Telegram administrator permissions. `/fsubcheck` checks Telegram's actual role for the exact bot account currently running. Add that bot to the channel/supergroup and promote it to administrator. For private channels, ensure the configured numeric chat ID is correct. Telegram 400 errors such as `PeerIdInvalid` or `ChatAdminRequired` must be resolved at the Telegram chat/access level; the bot cannot grant itself permissions.
+

@@ -21,6 +21,7 @@
 import base64
 import re
 import asyncio
+import logging
 import time
 import random
 from pyrogram import filters
@@ -61,24 +62,37 @@ async def is_subscribed(client, user_id):
 
 
 async def is_sub(client, user_id, channel_id):
+    """Check membership without masking Telegram API failures as ordinary non-membership."""
+    log = logging.getLogger(__name__)
     try:
-        member = await client.get_chat_member(channel_id, user_id)
-        status = member.status
-        return status in {
-            ChatMemberStatus.OWNER,
-            ChatMemberStatus.ADMINISTRATOR,
-            ChatMemberStatus.MEMBER
-        }
-
-    except UserNotParticipant:
-        mode = await db.get_channel_mode(channel_id)
-        if mode == "on":
-            exists = await db.req_user_exist(channel_id, user_id)
-            return exists
+        # Resolve the chat first so usernames, numeric IDs, and migrated chats are
+        # handled consistently by Pyrogram.
+        chat = await client.get_chat(channel_id)
+        member = await client.get_chat_member(chat.id, int(user_id))
+        status = getattr(member, "status", None)
+        status_name = getattr(status, "value", status)
+        if status_name in {"owner", "administrator", "member"}:
+            return True
+        # A restricted member can still be subscribed unless Telegram says they
+        # are not participating; the status itself is not a subscription failure.
+        if status_name == "restricted":
+            return bool(getattr(member, "is_member", False))
         return False
-
-    except Exception as e:
-        print(f"[!] Error in is_sub(): {e}")
+    except UserNotParticipant:
+        try:
+            mode = await db.get_channel_mode(channel_id)
+            if mode == "on":
+                return bool(await db.req_user_exist(channel_id, user_id))
+        except Exception:
+            log.exception("Force-sub request-mode lookup failed (chat=%s user=%s)", channel_id, user_id)
+        return False
+    except Exception as exc:
+        # BadRequest / PeerIdInvalid / ChatAdminRequired etc. are operational
+        # errors, not proof that the user has not joined. Log enough to diagnose.
+        log.warning(
+            "Membership check failed: chat_id=%s user_id=%s error=%s: %s",
+            channel_id, user_id, type(exc).__name__, exc,
+        )
         return False
 
 

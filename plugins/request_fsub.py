@@ -107,9 +107,35 @@ async def add_force_sub(client, message):
         if chat.type not in [ChatType.CHANNEL, ChatType.SUPERGROUP]:
             return await temp.edit("❌ Only channels/supergroups allowed.")
 
-        bot_member = await client.get_chat_member(chat.id, "me")
-        if bot_member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
-            return await temp.edit("❌ Bot must be admin in that chat.")
+        # Do not rely on the special "me" peer: some Pyrogram/session versions
+        # resolve it inconsistently and produce Telegram 400 errors.
+        bot_me = await client.get_me()
+        try:
+            bot_member = await client.get_chat_member(chat.id, bot_me.id)
+        except Exception as exc:
+            LOGGER = getattr(client, "LOGGER", None)
+            if callable(LOGGER):
+                LOGGER(__name__).warning(
+                    "Cannot inspect bot membership for chat=%s bot_id=%s: %s: %s",
+                    chat.id, bot_me.id, type(exc).__name__, exc
+                )
+            return await temp.edit(
+                "❌ <b>Could not verify the bot's permissions.</b>\n\n"
+                f"Chat: <code>{chat.id}</code>\n"
+                f"Bot ID: <code>{bot_me.id}</code>\n"
+                f"Telegram error: <code>{type(exc).__name__}: {str(exc)[:250]}</code>\n\n"
+                "Make sure this exact bot is a member of the chat, then promote it to administrator and retry."
+            )
+        status = getattr(bot_member, "status", None)
+        status_name = getattr(status, "value", status)
+        if status_name not in {"administrator", "owner"}:
+            return await temp.edit(
+                "❌ <b>This bot is not an administrator in that chat.</b>\n\n"
+                f"Chat: <code>{chat.id}</code>\n"
+                f"Bot: @{bot_me.username or 'no_username'} (<code>{bot_me.id}</code>)\n"
+                f"Telegram reports: <code>{status_name}</code>\n\n"
+                "Promote this exact bot account to administrator and retry."
+            )
 
         try:
             link = await client.export_chat_invite_link(chat.id)
@@ -128,6 +154,53 @@ async def add_force_sub(client, message):
 
     except Exception as e:
         return await temp.edit(f"❌ Failed to add chat:\n<code>{chat_id}</code>\n\n<i>{e}</i>")
+
+@Bot.on_message(filters.command("fsubcheck") & filters.private)
+async def diagnose_force_sub(client, message):
+    """Admin diagnostic for configured force-sub chats and this bot's Telegram role."""
+    if not await check_admin_or_owner(message):
+        return
+    status_msg = await message.reply("🔎 <b>Checking force-sub configuration...</b>", quote=True)
+    try:
+        chats = await db.show_channels()
+    except Exception as exc:
+        return await status_msg.edit(
+            "❌ <b>Database lookup failed</b>\n"
+            f"<code>{type(exc).__name__}: {str(exc)[:250]}</code>"
+        )
+    if not chats:
+        return await status_msg.edit("ℹ️ No force-sub channels are configured in the database.")
+    try:
+        me = await client.get_me()
+    except Exception as exc:
+        return await status_msg.edit(
+            "❌ Could not identify the running bot. "
+            f"<code>{type(exc).__name__}: {str(exc)[:200]}</code>"
+        )
+    lines = [f"🤖 <b>Bot:</b> @{me.username or 'no_username'} (<code>{me.id}</code>)"]
+    for item in chats:
+        chat_id = item[0] if isinstance(item, (tuple, list)) else item
+        try:
+            chat = await client.get_chat(int(chat_id))
+            member = await client.get_chat_member(chat.id, me.id)
+            status = getattr(member, "status", None)
+            status = getattr(status, "value", status)
+            good = status in {"administrator", "owner"}
+            lines.append(
+                f"\n{'✅' if good else '⚠️'} <b>{chat.title}</b>\n"
+                f"ID: <code>{chat.id}</code> · Bot role: <code>{status}</code>"
+                + ("" if good else "\nAction: promote this bot to administrator.")
+            )
+        except Exception as exc:
+            lines.append(
+                f"\n❌ <b>Chat <code>{chat_id}</code></b>\n"
+                f"Error: <code>{type(exc).__name__}: {str(exc)[:220]}</code>\n"
+                "Check the stored chat ID, ensure this exact bot is a member, and grant admin rights."
+            )
+    text = "\n".join(lines)
+    # Telegram messages are limited to 4096 characters.
+    await status_msg.edit(text[:3900], disable_web_page_preview=True)
+
 
 @Bot.on_message(filters.command('delchnl') & filters.private)
 async def del_force_sub(client, message):
