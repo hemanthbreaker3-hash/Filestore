@@ -29,6 +29,56 @@ from pyrogram.types import (
 
 BAN_SUPPORT = f"{BAN_SUPPORT}"
 
+
+async def _send_verification_log(client, user, verified_at, expire_at, event="VERIFIED"):
+    """Send a compact verification/audit event to the configured log chat, if enabled."""
+    try:
+        log_chat = await db.get_config_val("VERIFY_LOG_CHAT_ID", None)
+        if not log_chat:
+            return
+        username = f"@{user.username}" if getattr(user, "username", None) else "N/A"
+        verified_text = verified_at.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(verified_at, "strftime") else str(verified_at)
+        expire_text = expire_at.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(expire_at, "strftime") else str(expire_at)
+        text = (
+            f"<b>🛡️ Verification {event}</b>\\n\\n"
+            f"USERNAME : {username}\\n"
+            f"USER ID: <code>{user.id}</code>\\n"
+            f"VERIFIED TIME : <code>{verified_text}</code>\\n"
+            f"EXPIRE TIME : <code>{expire_text}</code>"
+        )
+        await client.send_message(int(log_chat), text, disable_web_page_preview=True)
+    except Exception as exc:
+        try:
+            LOGGER(__name__).warning("Verification log send failed: %s", exc)
+        except Exception:
+            pass
+
+
+async def _notify_security_event(client, user, reason):
+    """Notify owner/admins when a verification bypass/tampering attempt is detected."""
+    try:
+        owner = int(OWNER_ID) if OWNER_ID else None
+        admins = await db.get_all_admins()
+        targets = set(int(x) for x in (admins or []) if str(x).lstrip("-").isdigit())
+        if owner:
+            targets.add(owner)
+        if not targets:
+            return
+        username = f"@{user.username}" if getattr(user, "username", None) else "N/A"
+        text = (
+            "<b>🚨 Verification Security Alert</b>\\n\\n"
+            f"USERNAME : {username}\\nUSER ID: <code>{user.id}</code>\\n"
+            f"REASON: <code>{reason}</code>\\n"
+            f"TIME: <code>{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</code>"
+        )
+        for target in targets:
+            try:
+                await client.send_message(target, text, disable_web_page_preview=True)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
 @Bot.on_message(filters.command('start') & filters.private)
 async def start_command(client: Client, message: Message):
     user_id = message.from_user.id
@@ -69,6 +119,15 @@ async def start_command(client: Client, message: Message):
                 first_name=message.from_user.first_name or ""
             )
             await db.mark_verify_token_used(token)
+            try:
+                verified_doc = await db.get_verified_user(user_id) or {}
+                await _send_verification_log(
+                    client, message.from_user,
+                    verified_doc.get("verified_at") or datetime.utcnow(),
+                    verified_doc.get("expire_at") or datetime.utcnow() + timedelta(seconds=int(expire_sec)),
+                )
+            except Exception:
+                pass
 
             user_mention = message.from_user.mention
             readable_duration = get_readable_time(int(expire_sec))
@@ -89,6 +148,7 @@ async def start_command(client: Client, message: Message):
             else:
                 return
         else:
+            await _notify_security_event(client, message.from_user, "Invalid, expired, or mismatched verification token")
             return await message.reply_text("<b>❌ Verification link invalid or expired. Please try again.</b>")
 
     # Enforce Shortener Verification if enabled (Bypassed for Premium users)

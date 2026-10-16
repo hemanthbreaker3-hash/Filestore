@@ -23,7 +23,8 @@ def build_panel_menu():
     buttons = [
         [InlineKeyboardButton("⚙️ Core Config", callback_data="panel_core", style="primary"), InlineKeyboardButton("👥 Admin Manager", callback_data="panel_admins", style="primary")],
         [InlineKeyboardButton("🗄️ DB Channels", callback_data="panel_db_channels", style="primary"), InlineKeyboardButton("📢 Force Sub", callback_data="panel_fsub", style="primary")],
-        [InlineKeyboardButton("🛡️ Verification", callback_data="panel_verify", style="primary"), InlineKeyboardButton("🔗 Shorteners", callback_data="panel_shortener", style="primary")],
+        [InlineKeyboardButton("🛡️ Verification", callback_data="panel_verify", style="primary"), InlineKeyboardButton("🧾 Verify Log", callback_data="panel_verify_log", style="primary")],
+        [InlineKeyboardButton("🔗 Shorteners", callback_data="panel_shortener", style="primary")],
         [InlineKeyboardButton("🤖 Clone Bots", callback_data="panel_clones", style="primary"), InlineKeyboardButton("🖼️ Images", callback_data="panel_images", style="primary")],
         [InlineKeyboardButton("🔘 Custom Button", callback_data="panel_custom_btn", style="primary"), InlineKeyboardButton("📊 Statistics", callback_data="panel_stats", style="primary")],
         [InlineKeyboardButton("🧭 Referer Settings", callback_data="panel_referrer", style="primary")],
@@ -228,6 +229,38 @@ async def list_db_channels_command(client: Client, message: Message):
         text += f"• <code>{c}</code>\n"
     btn = [[InlineKeyboardButton("🗄️ DB Channels Panel", callback_data="panel_db_channels", style="primary")]]
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(btn))
+
+# ==================== Verification Log ====================
+@Bot.on_message(filters.command("verify_log") & filters.private)
+async def verify_log_command(client: Client, message: Message):
+    if not await check_admin_or_owner(message):
+        return
+    args = message.text.split(maxsplit=1)
+    current = await db.get_config_val("VERIFY_LOG_CHAT_ID", None)
+    if len(args) < 2:
+        status = f"<code>{current}</code>" if current else "Not configured"
+        return await message.reply_text(
+            "<b>🧾 Verification Log Settings</b>\\n\\n"
+            f"<b>Current log group/channel:</b> {status}\\n\\n"
+            "Set a destination with <code>/verify_log -1001234567890</code> or disable with <code>/verify_log off</code>.\\n"
+            "Make sure the bot can send messages in the destination."
+        )
+    value = args[1].strip()
+    if value.lower() in {"off", "disable", "none"}:
+        await db.update_config("VERIFY_LOG_CHAT_ID", None)
+        return await message.reply_text("<b>✅ Verification log disabled.</b>")
+    try:
+        chat_id = int(value)
+        chat = await client.get_chat(chat_id)
+        await client.send_message(chat_id, "<b>✅ Verification log connected.</b> New successful verifications will be logged here.")
+        await db.update_config("VERIFY_LOG_CHAT_ID", chat_id)
+        await message.reply_text(f"<b>✅ Verification log configured:</b> <code>{chat.id}</code>")
+    except Exception as exc:
+        await message.reply_text(
+            "<b>❌ Could not configure verification log.</b> Check the group/channel ID, add the bot, and grant permission to send messages.\\n"
+            f"<code>{str(exc)[:500]}</code>"
+        )
+
 
 # ==================== Verification Direct Commands ====================
 @Bot.on_message(filters.command("verify_on") & filters.private)
@@ -738,3 +771,26 @@ async def list_premium_users_command(client: Client, message: Message):
 
     for p in parts:
         await message.reply_text(p)
+
+
+@Bot.on_callback_query(filters.regex(r"^panel_verify_log$"))
+async def verify_log_panel_callback(client: Client, query: CallbackQuery):
+    try:
+        if not await check_admin_or_owner(query):
+            return await query.answer("Admins only", show_alert=True)
+        current = await db.get_config_val("VERIFY_LOG_CHAT_ID", None)
+        status = f"<code>{current}</code>" if current else "<i>Not configured</i>"
+        await query.answer()
+        await query.message.reply_text(
+            "<b>🧾 Verification Log</b>\\n\\n"
+            f"<b>Status:</b> {status}\\n\\n"
+            "Use <code>/verify_log -1001234567890</code> to set the group/channel ID.\\n"
+            "Use <code>/verify_log off</code> to disable logging.\\n\\n"
+            "Successful verifications are logged with username, user ID, verification time, and expiry time. "
+            "The bot must be a member with permission to send messages."
+        )
+    except Exception as exc:
+        try:
+            await query.answer(f"Panel error: {str(exc)[:150]}", show_alert=True)
+        except Exception:
+            pass
