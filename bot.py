@@ -76,10 +76,6 @@ name ="""
 
 
 class Bot(Client):
-    # Reference to the primary bot instance so clone handlers can relay logs
-    # through the main bot without requiring clone bots to join the log channel.
-    main_client = None
-
     def __init__(self):
         super().__init__(
             name="Bot",
@@ -92,8 +88,6 @@ class Bot(Client):
             bot_token=TG_BOT_TOKEN
         )
         self.LOGGER = LOGGER
-        if Bot.main_client is None:
-            Bot.main_client = self
 
     async def start(self):
         # Flask is started from main.py as __main__, while this method may also

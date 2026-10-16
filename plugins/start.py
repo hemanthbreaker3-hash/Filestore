@@ -40,20 +40,13 @@ async def _send_verification_log(client, user, verified_at, expire_at, event="VE
         verified_text = verified_at.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(verified_at, "strftime") else str(verified_at)
         expire_text = expire_at.strftime("%Y-%m-%d %H:%M:%S UTC") if hasattr(expire_at, "strftime") else str(expire_at)
         text = (
-            f"<b>🛡️ Verification {event}</b>\n\n"
-            f"USERNAME : {username}\n"
-            f"USER ID: <code>{user.id}</code>\n"
-            f"VERIFIED TIME : <code>{verified_text}</code>\n"
+            f"<b>🛡️ Verification {event}</b>\\n\\n"
+            f"USERNAME : {username}\\n"
+            f"USER ID: <code>{user.id}</code>\\n"
+            f"VERIFIED TIME : <code>{verified_text}</code>\\n"
             f"EXPIRE TIME : <code>{expire_text}</code>"
         )
-        # Always relay verification logs through the MAIN bot. Clone bots do not
-        # need to be members/admins of the configured verification-log channel.
-        # The main bot must have permission to post there.
-        main_client = getattr(Bot, "main_client", None)
-        if main_client is None:
-            LOGGER(__name__).warning("Verification log skipped: main bot instance is unavailable")
-            return
-        await main_client.send_message(int(log_chat), text, disable_web_page_preview=True)
+        await client.send_message(int(log_chat), text, disable_web_page_preview=True)
     except Exception as exc:
         try:
             LOGGER(__name__).warning("Verification log send failed: %s", exc)
@@ -73,9 +66,9 @@ async def _notify_security_event(client, user, reason):
             return
         username = f"@{user.username}" if getattr(user, "username", None) else "N/A"
         text = (
-            "<b>🚨 Verification Security Alert</b>\n\n"
-            f"USERNAME : {username}\nUSER ID: <code>{user.id}</code>\n"
-            f"REASON: <code>{reason}</code>\n"
+            "<b>🚨 Verification Security Alert</b>\\n\\n"
+            f"USERNAME : {username}\\nUSER ID: <code>{user.id}</code>\\n"
+            f"REASON: <code>{reason}</code>\\n"
             f"TIME: <code>{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</code>"
         )
         for target in targets:
