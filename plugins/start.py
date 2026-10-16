@@ -46,7 +46,10 @@ async def _send_verification_log(client, user, verified_at, expire_at, event="VE
             f"VERIFIED TIME : <code>{verified_text}</code>\\n"
             f"EXPIRE TIME : <code>{expire_text}</code>"
         )
-        await client.send_message(int(log_chat), text, disable_web_page_preview=True)
+        # Always relay verification logs through the MAIN bot. Clone bots do not
+        # need to be members/admins of the configured verification-log channel.
+        # The main bot must have permission to post there.
+        await Bot.send_message(int(log_chat), text, disable_web_page_preview=True)
     except Exception as exc:
         try:
             LOGGER(__name__).warning("Verification log send failed: %s", exc)
