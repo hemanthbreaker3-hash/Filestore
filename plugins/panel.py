@@ -240,9 +240,9 @@ async def verify_log_command(client: Client, message: Message):
     if len(args) < 2:
         status = f"<code>{current}</code>" if current else "Not configured"
         return await message.reply_text(
-            "<b>🧾 Verification Log Settings</b>\\n\\n"
-            f"<b>Current log group/channel:</b> {status}\\n\\n"
-            "Set a destination with <code>/verify_log -1001234567890</code> or disable with <code>/verify_log off</code>.\\n"
+            "<b>🧾 Verification Log Settings</b>\n\n"
+            f"<b>Current log group/channel:</b> {status}\n\n"
+            "Set a destination with <code>/verify_log -1001234567890</code> or disable with <code>/verify_log off</code>.\n"
             "Make sure the bot can send messages in the destination."
         )
     value = args[1].strip()
@@ -251,13 +251,19 @@ async def verify_log_command(client: Client, message: Message):
         return await message.reply_text("<b>✅ Verification log disabled.</b>")
     try:
         chat_id = int(value)
-        chat = await client.get_chat(chat_id)
-        await client.send_message(chat_id, "<b>✅ Verification log connected.</b> New successful verifications will be logged here.")
+        # Verify the destination using the main bot, since clone bots must not
+        # need membership/admin rights in the verification-log destination.
+        from bot import Bot as BotClass
+        main_client = getattr(BotClass, "main_client", None)
+        if main_client is None:
+            return await message.reply_text("<b>❌ Main bot is not ready yet.</b> Please retry in a few seconds.")
+        chat = await main_client.get_chat(chat_id)
+        await main_client.send_message(chat_id, "<b>✅ Verification log connected.</b> New successful verifications will be logged here.")
         await db.update_config("VERIFY_LOG_CHAT_ID", chat_id)
         await message.reply_text(f"<b>✅ Verification log configured:</b> <code>{chat.id}</code>")
     except Exception as exc:
         await message.reply_text(
-            "<b>❌ Could not configure verification log.</b> Check the group/channel ID, add the bot, and grant permission to send messages.\\n"
+            "<b>❌ Could not configure verification log.</b> Check the group/channel ID, add the bot, and grant permission to send messages.\n"
             f"<code>{str(exc)[:500]}</code>"
         )
 
@@ -775,22 +781,51 @@ async def list_premium_users_command(client: Client, message: Message):
 
 @Bot.on_callback_query(filters.regex(r"^panel_verify_log$"))
 async def verify_log_panel_callback(client: Client, query: CallbackQuery):
+    # Acknowledge immediately so Telegram does not leave the button spinning.
     try:
-        if not await check_admin_or_owner(query):
-            return await query.answer("Admins only", show_alert=True)
+        await query.answer()
+    except Exception:
+        pass
+    try:
+        user = query.from_user
+        if not user or not (await is_owner(user.id) or await is_admin(user.id)):
+            try:
+                await query.answer("Admins only", show_alert=True)
+            except Exception:
+                pass
+            return
         current = await db.get_config_val("VERIFY_LOG_CHAT_ID", None)
         status = f"<code>{current}</code>" if current else "<i>Not configured</i>"
-        await query.answer()
-        await query.message.reply_text(
-            "<b>🧾 Verification Log</b>\\n\\n"
-            f"<b>Status:</b> {status}\\n\\n"
-            "Use <code>/verify_log -1001234567890</code> to set the group/channel ID.\\n"
-            "Use <code>/verify_log off</code> to disable logging.\\n\\n"
-            "Successful verifications are logged with username, user ID, verification time, and expiry time. "
-            "The bot must be a member with permission to send messages."
+        body = (
+            "<b>🧾 Verification Log Settings</b>\n\n"
+            f"<b>Status:</b> {status}\n\n"
+            "<b>Set destination:</b> send <code>/verify_log -1001234567890</code>\n"
+            "<b>Disable:</b> send <code>/verify_log off</code>\n\n"
+            "Verification events from the main bot and clone bots are relayed by the main bot. "
+            "Only the main bot needs permission to post in the configured group/channel."
         )
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Panel", callback_data="panel_home", style="primary")]])
+        try:
+            await query.message.edit_text(body, reply_markup=markup)
+        except Exception:
+            await query.message.reply_text(body, reply_markup=markup)
     except Exception as exc:
         try:
-            await query.answer(f"Panel error: {str(exc)[:150]}", show_alert=True)
+            await query.message.reply_text(f"<b>❌ Verification log panel error:</b> <code>{str(exc)[:250]}</code>")
         except Exception:
             pass
+
+
+@Bot.on_callback_query(filters.regex(r"^panel_home$"))
+async def panel_home_callback(client: Client, query: CallbackQuery):
+    try:
+        await query.answer()
+        if not query.from_user or not (await is_owner(query.from_user.id) or await is_admin(query.from_user.id)):
+            return
+        await query.message.edit_text(
+            "<b>✨ ᴀɴɪᴢᴏɴᴇғʟɪx — Control Panel</b>\n"
+            "<i>Select a module below to configure your bot.</i>",
+            reply_markup=build_panel_menu(),
+        )
+    except Exception:
+        pass
