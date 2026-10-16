@@ -96,7 +96,11 @@ Parser.handle_starttag = patched_handle_starttag
 # Patch message effect support
 from hydrogram.types import Message
 
-original_invoke = hydrogram.Client.invoke
+# Make this monkey-patch idempotent. If main is imported/reloaded, never wrap
+# our own patched function as the original (which creates recursive invoke calls).
+if not hasattr(hydrogram.Client, "_filestore_original_invoke"):
+    hydrogram.Client._filestore_original_invoke = hydrogram.Client.invoke
+original_invoke = hydrogram.Client._filestore_original_invoke
 
 async def patched_invoke(self, query, *args, **kwargs):
     effect_id = getattr(self, "_current_message_effect_id", None)

@@ -167,7 +167,7 @@ from plugins.anizoneflix import check_admin_or_owner, is_admin, is_owner
 from plugins.panel import build_panel_menu, active_clones
 import psutil
 
-@Bot.on_callback_query(filters.regex("^panel_"))
+@Bot.on_callback_query(filters.regex(r"^panel_(?!verify_log$)"))
 async def panel_callback_handler(client: Bot, query: CallbackQuery):
     user_id = query.from_user.id
     if not (await is_owner(user_id) or await is_admin(user_id)):
@@ -613,8 +613,14 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
         return await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(btn))
 
     elif data == "panel_sync":
+        # Do not recursively dispatch the same callback: that re-answers an expired
+        # callback query and causes QUERY_ID_INVALID / unbounded recursion.
         await query.answer("System configuration synced!", show_alert=True)
-        return await panel_callback_handler(client, query)
+        return await query.message.edit_text(
+            "<b>✨ ᴀɴɪᴢᴏɴᴇғʟɪx — Control Panel</b>\n"
+            "<i>Welcome to the centralized management dashboard. Select a module below to configure your bot:</i>",
+            reply_markup=build_panel_menu(),
+        )
 
     elif data.startswith("panel_del_admin_"):
         aid = int(data.split("_")[3])
