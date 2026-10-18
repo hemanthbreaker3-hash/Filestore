@@ -130,13 +130,50 @@
                 <span class="timer-label">Session Duration</span>
                 <span class="timer-value">⏱ 10 minutes</span>
             </div>
-            <form action="/go_shortener" method="GET">
+            <form id="verify-form" action="/go_shortener" method="GET">
                 <input type="hidden" name="token" value="{{ token }}">
                 {% if short_st %}<input type="hidden" name="st" value="{{ short_st }}">{% endif %}
-                <button type="submit" class="btn">Click here to confirm</button>
+                <input type="hidden" id="tab-id" name="tab_id" value="">
+                <button id="verify-button" type="submit" class="btn" disabled>Preparing secure session…</button>
+                <p id="session-status" role="status" aria-live="polite" style="margin-top:12px;color:#c4c4cc;font-size:13px">Starting verification session…</p>
             </form>
             <div class="footer">Protected by <b>AniZoneFlix Security System</b></div>
         </div>
     </div>
+    <script>
+    // This script only supplies a per-tab identifier. All trust decisions and
+    // comparisons are performed by the backend using the signed Flask session.
+    (async function () {
+        const button = document.getElementById('verify-button');
+        const status = document.getElementById('session-status');
+        const tabField = document.getElementById('tab-id');
+        const tokenField = document.querySelector('input[name="token"]');
+        try {
+            let tabId = sessionStorage.getItem('filestore_verification_tab_id');
+            if (!tabId || !/^[A-Za-z0-9_-]{20,100}$/.test(tabId)) {
+                const bytes = new Uint8Array(24);
+                crypto.getRandomValues(bytes);
+                tabId = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                sessionStorage.setItem('filestore_verification_tab_id', tabId);
+            }
+            tabField.value = tabId;
+            const response = await fetch('/api/frontend-verify', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/json', 'X-Requested-With': 'fetch'},
+                body: JSON.stringify({token: tokenField.value, tab_id: tabId})
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.ok) throw new Error(result.status || result.error || 'Session not started');
+            status.textContent = 'Secure session ready. Continue in this same tab.';
+            button.textContent = 'Click here to confirm';
+            button.disabled = false;
+        } catch (error) {
+            status.textContent = 'Session not started — reopen the original verification link from Telegram in this tab.';
+            button.textContent = 'Session not started';
+            button.disabled = true;
+        }
+    })();
+    </script>
 </body>
 </html>

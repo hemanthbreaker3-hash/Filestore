@@ -319,9 +319,11 @@ def go_shortener():
         return 'Verification link expired or invalid.', 403
 
     short_st = request.args.get('st', '') or token_key
-    tab_id = request.args.get('tab_id', '')
-    if not tab_id or not hmac.compare_digest(tab_id, str(session.get('verification_tab_id') or '')):
-        return render_template('bypass_detected.html', reason='Tab session is missing or mismatched. Session not started.'), 403
+    tab_id = (request.args.get('tab_id') or '').strip()
+    expected_tab_id = str(session.get('verification_tab_id') or '')
+    if (not tab_id or not expected_tab_id
+            or not hmac.compare_digest(tab_id, expected_tab_id)):
+        return render_template('bypass_detected.html', reason='This is not the tab that started verification. Session not started — reopen the original link in the same tab.'), 403
 
     # Keep this status page intentionally static: no spinner, no animated dots,
     # and no repeated/continuous animation. The API pre-generates/caches the link.
@@ -476,8 +478,9 @@ def verify_backend():
         if not session.get('frontend_verification_started') or not session.get('frontend_verification_passed'):
             return render_template('bypass_detected.html', reason='Frontend verification was not completed. Session not started.'), 403
         expected_tab_id = str(session.get('verification_tab_id') or '')
-        if not tab_id or not expected_tab_id or not hmac.compare_digest(tab_id, expected_tab_id):
-            return render_template('bypass_detected.html', reason='Tab session is missing or mismatched. Session not started; reopen the original verification link in the same tab.'), 403
+        if (not tab_id or not expected_tab_id
+                or not hmac.compare_digest(tab_id, expected_tab_id)):
+            return render_template('bypass_detected.html', reason='This is not the tab that started verification. Session not started — reopen the original link in the same tab.'), 403
         frontend_age = int(time.time()) - int(session.get('frontend_verified_at') or 0)
         if frontend_age < 0 or frontend_age > 600:
             session.pop('frontend_verification_passed', None)
