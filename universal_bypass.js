@@ -2,7 +2,7 @@ const http = require('http');
 const https = require('https');
 
 const MAX_REDIRECTS = 10;
-const MAX_TELEGRAM_URL_LENGTH = 2000;
+const MAX_TELEGRAM_URL_LENGTH = 4096;
 
 // Supported target parameter names
 const TARGET_KEYS = [

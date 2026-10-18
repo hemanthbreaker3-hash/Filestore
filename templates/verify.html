@@ -5,14 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AniZoneFlix • Verification</title>
     <script>
-        let preloadedShortlink = null;
         const tokenKey = {{ token|tojson }};
         const shortSt = {{ short_st|tojson }};
-        if (tokenKey) {
-            fetch('/api/get_shortener_url?token=' + encodeURIComponent(tokenKey) + '&st=' + encodeURIComponent(shortSt))
-                .then(res => res.json())
-                .then(data => { if (data && data.url) preloadedShortlink = data.url; })
-                .catch(() => {});
+        const tabStorageKey = 'filestore_tab_' + tokenKey;
+        let tabId = sessionStorage.getItem(tabStorageKey);
+        if (!tabId) {
+            const bytes = new Uint8Array(24);
+            crypto.getRandomValues(bytes);
+            tabId = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+            sessionStorage.setItem(tabStorageKey, tabId);
         }
         async function handleVerifyProceed(event) {
             event.preventDefault();
@@ -24,7 +25,7 @@
                 const response = await fetch('/api/frontend-verify', {
                     method: 'POST', credentials: 'same-origin',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({token: tokenKey})
+                    body: JSON.stringify({token: tokenKey, tab_id: tabId})
                 });
                 const result = await response.json();
                 if (!response.ok || !result.ok) {
@@ -32,11 +33,8 @@
                     button.disabled = false;
                     return;
                 }
-                if (preloadedShortlink) {
-                    window.location.replace(preloadedShortlink);
-                } else {
-                    window.location.href = '/go_shortener?token=' + encodeURIComponent(tokenKey) + '&st=' + encodeURIComponent(shortSt);
-                }
+                // Only start the shortener leg after the server records frontend verification.
+                window.location.replace('/go_shortener?token=' + encodeURIComponent(tokenKey) + '&st=' + encodeURIComponent(shortSt) + '&tab_id=' + encodeURIComponent(tabId));
             } catch (_) {
                 button.textContent = 'Session not started — try again';
                 button.disabled = false;

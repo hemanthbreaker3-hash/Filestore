@@ -8,7 +8,7 @@ from pyrogram.types import Message
 from bot import Bot
 
 MAX_REDIRECTS = 10
-MAX_TELEGRAM_URL_LENGTH = 2000
+MAX_TELEGRAM_URL_LENGTH = 4096
 
 # Supported target parameter names
 TARGET_KEYS = [
