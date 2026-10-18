@@ -1,131 +1,150 @@
-# AniZoneFlix FileStore
+# AniZoneFlix Telegram File Store Bot
 
-Telegram-powered file sharing bot with a Flask verification website, configurable shorteners, and an optional Vercel-to-Render website proxy.
+<p align="center">
+  <strong>A Telegram file-storage and link-delivery bot maintained by AniZoneFlix.</strong><br>
+  <a href="https://t.me/anizoneflix">Updates & support: @anizoneflix</a>
+</p>
 
 ## Features
 
-- Telegram bot for file links, batch links, access management, force-subscription, and admin tools.
-- Flask verification pages stored in `web/templates/`.
-- Shortlink callback verification performed by the backend.
-- Session, flow-expiry, and browser-tab binding checks before access is granted.
-- Optional Referer enforcement per configured shortener. When disabled for a shortener, the Referer check is skipped; the remaining backend checks still apply.
-- Security response headers and a Content Security Policy nonce for the verification page's inline scripts.
-- Optional Vercel frontend/proxy under `vercel/`.
+- Store and retrieve Telegram media through deep links.
+- Batch and advanced batch link generation (`/batch`, `/advbatch`, `/auto_batch`).
+- MongoDB-backed user, configuration, and channel data.
+- Multiple database channels and clone-bot management.
+- Optional force-subscription, verification, URL shorteners, and premium access.
+- Admin controls, reports, backups, and broadcasts.
+- Telegram HTML message formatting with bold text, italics, and blockquotes where supported.
+- Ordered batch output: requested message order is preserved, including descending ranges; configured shortener selection is deterministic.
 
-## Project layout
+## Requirements
 
-```text
-.
-├── main.py                 # Flask verification app and bot process entry point
-├── bot.py                  # Telegram bot client
-├── config.py               # Environment configuration
-├── database/
-│   └── database.py         # MongoDB access layer
-├── plugins/                # Telegram bot command handlers
-├── web/
-│   └── templates/          # HTML templates for verification states
-├── universal_bypass.js     # Frontend utility used by the project
-├── requirements.txt
-├── Dockerfile
-├── Procfile
-└── vercel/                 # Optional Vercel frontend/proxy
-```
+- Python 3.10+
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+- Telegram API ID and API hash from [my.telegram.org](https://my.telegram.org)
+- A MongoDB database/connection URI
+- A Telegram channel where the bot can access the stored messages; grant the bot the required permissions.
 
-## Required environment variables
+## Configuration
 
-Set these in your hosting provider's environment settings. Never commit real credentials or `.env` files.
+Set these environment variables in your **Render service → Environment** settings. The application reads configuration only from process environment variables; it does not load `.env` files or use embedded credential defaults. For local development, export the same variables in your shell before starting the app.
 
 | Variable | Required | Description |
-|---|---:|---|
-| `TG_BOT_TOKEN` | Yes | Telegram bot token from BotFather |
+| --- | --- | --- |
 | `APP_ID` | Yes | Telegram API ID |
 | `API_HASH` | Yes | Telegram API hash |
+| `TG_BOT_TOKEN` | Yes | Bot token |
 | `DATABASE_URL` | Yes | MongoDB connection URI |
-| `CHANNEL_ID` | Recommended | Telegram channel ID used to store/retrieve files |
-| `OWNER_ID` | Recommended | Numeric Telegram owner ID |
-| `SESSION_SECRET_KEY` | Yes for stable production sessions | Long random secret used to sign Flask sessions; keep stable across deploys and instances |
-| `PORT` | No | Web server port; defaults to `8080` |
-| `DB_NAME` | No | MongoDB database name; defaults to `Filestore` |
-| `SESSION_COOKIE_SECURE` | No | Defaults to `true`; set to `false` only for local HTTP development |
-| `LOG_LEVEL` | No | Python logging level, e.g. `INFO` or `DEBUG` |
+| `CHANNEL_ID` | Yes | Primary database channel ID, usually `-100...` |
+| `OWNER_ID` | Yes | Numeric Telegram user ID of the owner |
+| `PORT` | No | Web server port; platform-provided `PORT` is respected |
+| `DB_NAME` | No | MongoDB database name (default: `AniZoneFlix`) |
+| `BAN_SUPPORT` | No | Support URL (default: `https://t.me/anizoneflix`) |
+| `TG_BOT_WORKERS` | No | Telegram worker count (default: `200`) |
+| `BASE_URL` | As needed | Public HTTPS URL used by verification/deep-link web routes; configure the database setting if your deployment manages it there |
+| `START_PIC` | No | URL for the start image |
+| `FORCE_PIC` | No | URL for the force-subscription image |
+| `CUSTOM_CAPTION` | No | Custom media caption |
 
-Generate a session secret locally:
+Do not commit real tokens, API hashes, or database credentials. Keep MongoDB network access restricted where possible.
 
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-```
 
-Set the resulting value as `SESSION_SECRET_KEY` in the host dashboard. Do not paste the secret into source code or commit it. If the secret changes, existing browser sessions will be invalidated.
+### Render environment variables only
 
-Other optional bot settings are read from environment variables in `config.py`, including `TG_BOT_WORKERS`, `FSUB_LINK_EXPIRY`, `START_PIC`, `FORCE_PIC`, `PROTECT_CONTENT`, and custom message values.
+In Render, open the service that runs this bot, go to **Environment**, and configure `TG_BOT_TOKEN`, `APP_ID`, `API_HASH`, `DATABASE_URL`, `CHANNEL_ID`, and `OWNER_ID`. Set `DB_NAME` to the existing database name used by your current deployment. Do not change the MongoDB URI or database name unless you intend to point the bot at a different database. After saving changes, trigger a redeploy/restart.
 
-## Deploy on Render
+No secret values are bundled in the source. If a required credential is missing, startup validation will identify the missing setting without printing its value. The bot cannot read Render dashboard values through the dashboard; Render injects them into the running process.
 
-1. Create a Render **Web Service** from this repository.
-2. Use the repository's Dockerfile, or set the build command to `pip install -r requirements.txt` and the start command to `python main.py`.
-3. Add the required environment variables above.
-4. Deploy and wait for the bot and web service to start.
-5. Open the service URL and confirm the home page responds.
-6. In the bot's admin/panel commands, set the public `BASE_URL` to the Render service URL. Use the exact HTTPS origin, without a trailing path.
-7. Configure shortener API domains and keys in the bot panel, then test a fresh verification link end-to-end.
+## MongoDB persistence and troubleshooting
 
-The bot and Flask app share a process in the default deployment. Use one process/worker unless the application is refactored to share its event loop and database lifecycle across workers.
+- Use a managed MongoDB deployment (such as MongoDB Atlas) or a MongoDB instance with persistent storage. A container's local filesystem is not a database backup.
+- Set `DATABASE_URL` to the full MongoDB connection URI and `DB_NAME` to the same database name across every restart/deployment. The default database name is `AniZoneFlix`.
+- In Atlas, create a database user, allow the deployment host in Network Access, and verify the URI includes the correct credentials and cluster. Never paste credentials into public logs or commit them to Git.
+- Do not change `DB_NAME` between deploys unless you intentionally want to use a different database. An empty-looking bot after a deploy often means it connected to a different database or cluster, not that MongoDB deleted the records.
+- Database calls from Flask are dispatched to the bot's running asyncio loop. The web server no longer creates and closes temporary event loops for MongoDB calls, avoiding Motor clients being reused across different loops.
+- If the database is unavailable, configuration writes should report failure instead of claiming that settings were saved. Check startup logs for MongoDB connection errors and confirm the database user has read/write access.
+- Back up the database before upgrading or changing cluster/database names. Do not restore a backup by deleting collections unless that replacement is intended.
 
-## Optional Vercel frontend
+## Base URL configuration
 
-The `vercel/` directory provides a small landing page and path-preserving proxy. Configure these Vercel environment variables:
+Set `BASE_URL` to the public HTTPS origin of the running web service, for example `https://your-service.onrender.com`, with no verification path appended. You can also update it using `/set_base_url https://your-service.onrender.com` as an authorized admin/owner. The bot verifies the value by reading it back from MongoDB before reporting success. All generated verification links use the stored value; if it is absent, the environment variable is used as the fallback. If a stale URL remains, update the database setting and check that the deployed service points to the expected `DATABASE_URL` and `DB_NAME`.
 
-- `RENDER_BACKEND_URL`: the HTTPS URL of the Render backend.
-- `TELEGRAM_BOT_USERNAME`: bot username without the leading `@`.
-- `SITE_NAME`: optional website title.
+## Verification template
 
-If the Vercel domain is used for user-facing links, ensure the backend's `BASE_URL` and the generated callback URLs consistently use the intended public domain. Do not mix Render and Vercel origins in the same flow unless the proxy forwards cookies and callback paths correctly.
+AniZoneFlix uses one shared `templates/verify.html` template for every user. It is responsive and avoids mandatory external font downloads and heavy blur effects to keep it usable on low-end phones as well as desktop devices. Other verification variants and development test files have been removed from this release.
 
-## Verification flow
-
-1. User opens the frontend verification page.
-2. The page navigates to the configured shortlink.
-3. The shortener returns the browser to the backend callback.
-4. The backend validates the token, session, expiry, browser-tab binding, and (only if enabled for that shortener) the Referer.
-5. The backend grants access and redirects to the Telegram bot only if all required checks pass. Any failed check denies access.
-
-The frontend is for presentation and navigation; backend code is the authorization authority. A browser tab identifier and Referer are supplementary signals, not cryptographic proof of a human or a specific physical tab. Do not treat them as substitutes for server-side sessions, short-lived tokens, expiry, rate limiting, and one-time token consumption.
-
-## Local development
-
-Use Python 3.10 or newer. Install dependencies in a virtual environment:
+## Run locally or on a VPS
 
 ```bash
-python -m venv .venv
-# Linux/macOS
-. .venv/bin/activate
-# Windows PowerShell
-# .venv\Scripts\Activate.ps1
+git clone <your-repository-url>
+cd <repository-directory>
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Set the required environment variables, then run:
+Export the required variables in your shell, then run. The app intentionally does not read `.env` files; Render values are injected into the process environment at runtime:
 
 ```bash
-python main.py
+python3 main.py
 ```
 
-For local HTTP only, set `SESSION_COOKIE_SECURE=false`; restore it to `true` in HTTPS production. MongoDB and valid Telegram credentials are needed to exercise the full app. The browser verification flow cannot be fully tested by Python syntax checks alone.
+To run tests:
+
+```bash
+Run the bot's startup checks and verify MongoDB connectivity before deployment.
+```
+
+## Deploy with Docker
+
+The repository includes a `Dockerfile`.
+
+```bash
+docker build -t anizoneflix-bot .
+docker run -e TG_BOT_TOKEN -e APP_ID -e API_HASH -e DATABASE_URL -e DB_NAME -e CHANNEL_ID -e OWNER_ID -p 8001:8001 anizoneflix-bot
+```
+
+Set `PORT` to the port your hosting platform expects. Confirm that the Flask server binds to `0.0.0.0` and that the platform health check targets the configured port.
+
+## Deploy on Render
+
+1. Push this repository to a Git provider.
+2. In Render, create a **Web Service** from the repository.
+3. Choose Docker deployment (or the Python runtime if you configure the build/start commands yourself).
+4. Add the required environment variables from the table above.
+5. Attach a persistent MongoDB service/Atlas database and set `DATABASE_URL`.
+6. Deploy and inspect the build and runtime logs. Resolve missing variables or dependency-build errors before sharing the service URL.
+7. Set the public HTTPS URL in the bot's `BASE_URL` configuration wherever verification links are generated.
+8. Test `/start`, a known file deep link, batch generation, and the verification flow.
+
+Free hosting plans may sleep, restart, or have resource limits; no deployment guide can guarantee uninterrupted uptime on every provider or plan.
 
 ## Troubleshooting
 
-- **Sessions restart unexpectedly:** set a persistent `SESSION_SECRET_KEY`; do not generate a new value at every start.
-- **Browser does not keep the session locally:** local HTTP development needs `SESSION_COOKIE_SECURE=false`. Production should use HTTPS and leave it enabled.
-- **Verification says the session was not started:** reopen the original link in the same browser tab and complete the shortlink without switching browsers. Confirm the public callback URL points to this backend.
-- **No shortener can generate a link:** check the configured shortener domain/API key and inspect application logs. The backend intentionally refuses to grant access when no shortener succeeds.
-- **Database unavailable:** verify `DATABASE_URL`, database network access, and provider allowlists.
-- **Bot starts but cannot retrieve files:** verify `CHANNEL_ID` and that the bot is an administrator in the storage channel.
-- **Imports fail during deployment:** use the supported Python version and install all packages from `requirements.txt`; check the first missing/incompatible package in build logs.
+- **Bot does not start:** check `TG_BOT_TOKEN`, `APP_ID`, `API_HASH`, and startup logs.
+- **Database errors:** verify `DATABASE_URL`, database permissions, IP/network allow-list, and connectivity.
+- **Files are missing:** confirm `CHANNEL_ID`, channel membership/permissions, and that the requested message IDs exist.
+- **Verification links fail:** make sure `BASE_URL` is the public HTTPS address and that the web service is reachable.
+- **FloodWait errors:** Telegram rate limits are enforced by Telegram. The bot waits as required; do not remove FloodWait handling.
+- **Slow batch scans:** use reasonable message ranges and monitor hosting CPU, network, and Telegram API limits.
 
-## Security notes
+## Branding
 
-- Keep `SESSION_SECRET_KEY`, Telegram credentials, and MongoDB credentials private.
-- Keep the service on HTTPS in production.
-- Review logs before enabling verbose logging in a public deployment; do not log tokens or session cookies.
-- A successful syntax check is not equivalent to a full production security audit. Test the actual browser → shortener → callback → Telegram flow after each deployment.
+- Brand: **AniZoneFlix**
+- Channel: [https://t.me/anizoneflix](https://t.me/anizoneflix)
+- Handle: **@anizoneflix**
+
+Use this branding for project-facing messages and documentation. Keep technical filenames and third-party dependency names unchanged where renaming them would break compatibility.
+
+## Force-sub Telegram 400 / admin diagnostics
+
+- Run `/fsubcheck` in the bot's private chat as the configured owner/admin. It reports the exact running bot ID, each force-sub chat ID, Telegram-reported bot role, and API errors.
+- When adding a channel with `/addchnl`, the bot now checks membership using its resolved numeric bot ID instead of the special `"me"` peer and displays actionable Telegram errors.
+- Membership-check API failures are logged with chat ID, user ID, exception type, and message rather than being silently swallowed.
+
+**Important:** a bot's ID in your app database (or your user ID in the bot's `/admins` list) does not grant Telegram administrator permissions. `/fsubcheck` checks Telegram's actual role for the exact bot account currently running. Add that bot to the channel/supergroup and promote it to administrator. For private channels, ensure the configured numeric chat ID is correct. Telegram 400 errors such as `PeerIdInvalid` or `ChatAdminRequired` must be resolved at the Telegram chat/access level; the bot cannot grant itself permissions.
+
+
+
+## Verification security hardening
+Set `SESSION_SECRET_KEY` to a long random secret in your deployment environment (for example, generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"`). This signs the browser session cookie and signed bypass-event URLs. Keep it private and stable across restarts/instances. Verification now binds the browser session to the token, rejects unknown verification query parameters and obvious bookmarklet/headless requests, and emits security headers. User-Agent checks are only a signal and are not sufficient by themselves to prove automation.

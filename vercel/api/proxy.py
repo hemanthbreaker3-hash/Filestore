@@ -1,8 +1,6 @@
 """Small Flask website and safe path-preserving proxy to the Render bot service."""
 from __future__ import annotations
 import os
-import html
-import re
 from urllib.parse import urlsplit, urlencode
 import requests
 from flask import Flask, Response, jsonify, request
@@ -25,14 +23,9 @@ def _valid_backend(url: str) -> bool:
 
 @app.get("/")
 def home():
-    bot_username = TELEGRAM_BOT_USERNAME.strip().lstrip("@")
-    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username):
-        bot_username = ""
-    bot_url = f"https://t.me/{bot_username}" if bot_username else "#bot"
-    site_name = html.escape(SITE_NAME)
-    safe_bot_url = html.escape(bot_url, quote=True)
-    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#080d1d"><title>{site_name}</title><style>
-:root{{color-scheme:dark}}*{{box-sizing:border-box}}body{{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;background:radial-gradient(ellipse at 15% 5%,#142b67 0,transparent 42%),radial-gradient(ellipse at 90% 70%,#32165e 0,transparent 35%),#080d1d;color:#f5f7ff;min-height:100vh;display:grid;place-items:center;padding:24px}}main{{width:min(900px,100%);border:1px solid #34466e;background:#0b1326dd;border-radius:28px;padding:clamp(28px,6vw,64px);box-shadow:0 24px 80px #0008}}.tag{{color:#7cebd3;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:.8rem}}h1{{font-size:clamp(2.4rem,7vw,5rem);line-height:1.04;margin:16px 0}}p{{color:#c6d0e9;max-width:650px}}.chips{{display:flex;flex-wrap:wrap;gap:10px;margin:26px 0}}.chips span{{border:1px solid #35476b;background:#111f3b;border-radius:999px;padding:8px 13px}}a{{display:inline-block;background:linear-gradient(100deg,#08a9ee,#5865f2);padding:13px 20px;border-radius:13px;color:white;text-decoration:none;font-weight:700}}footer{{margin-top:35px;color:#8494b8;font-size:.85rem}}</style></head><body><main><div class="tag">✨ File sharing made simple</div><h1>Welcome to<br>{site_name}</h1><p>Share files, create links, and manage access through our Telegram bot. Verification links are securely handled by the connected backend.</p><div class="chips"><span>⚡ Fast</span><span>🔒 Access verification</span><span>📁 File sharing</span><span>🤖 Telegram powered</span></div><a href="{safe_bot_url}" rel="noopener noreferrer">Open Telegram Bot ↗</a><footer>Website hosted on Vercel · Bot service hosted on Render</footer></main></body></html>'''
+    bot_url = f"https://t.me/{TELEGRAM_BOT_USERNAME}" if TELEGRAM_BOT_USERNAME else "#bot"
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#080d1d"><title>{SITE_NAME}</title><style>
+:root{{color-scheme:dark}}*{{box-sizing:border-box}}body{{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;background:radial-gradient(ellipse at 15% 5%,#142b67 0,transparent 42%),radial-gradient(ellipse at 90% 70%,#32165e 0,transparent 35%),#080d1d;color:#f5f7ff;min-height:100vh;display:grid;place-items:center;padding:24px}}main{{width:min(900px,100%);border:1px solid #34466e;background:#0b1326dd;border-radius:28px;padding:clamp(28px,6vw,64px);box-shadow:0 24px 80px #0008}}.tag{{color:#7cebd3;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:.8rem}}h1{{font-size:clamp(2.4rem,7vw,5rem);line-height:1.04;margin:16px 0}}p{{color:#c6d0e9;max-width:650px}}.chips{{display:flex;flex-wrap:wrap;gap:10px;margin:26px 0}}.chips span{{border:1px solid #35476b;background:#111f3b;border-radius:999px;padding:8px 13px}}a{{display:inline-block;background:linear-gradient(100deg,#08a9ee,#5865f2);padding:13px 20px;border-radius:13px;color:white;text-decoration:none;font-weight:700}}footer{{margin-top:35px;color:#8494b8;font-size:.85rem}}</style></head><body><main><div class="tag">✨ File sharing made simple</div><h1>Welcome to<br>{SITE_NAME}</h1><p>Share files, create links, and manage access through our Telegram bot. Verification links are securely handled by the connected backend.</p><div class="chips"><span>⚡ Fast</span><span>🔒 Access verification</span><span>📁 File sharing</span><span>🤖 Telegram powered</span></div><a href="{bot_url}">Open Telegram Bot ↗</a><footer>Website hosted on Vercel · Bot service hosted on Render</footer></main></body></html>'''
 
 
 @app.get("/healthz")
@@ -62,13 +55,7 @@ def proxy(path: str):
     query_string = original_query
     if query_string:
         target += "?" + query_string
-    headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() not in {"host", "content-length", "accept-encoding"}}
-    # Ask the Render backend for an uncompressed body. If Vercel's incoming
-    # Accept-Encoding (for example br/zstd) is forwarded, requests may not
-    # decode that encoding but this proxy strips Content-Encoding; the browser
-    # then displays compressed bytes as replacement characters. Identity avoids
-    # that mismatch and keeps HTML/JSON verification responses readable.
-    headers["Accept-Encoding"] = "identity"
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() not in {"host", "content-length"}}
     try:
         upstream = requests.request(method=request.method, url=target, params=None,
                                     data=request.get_data(), headers=headers,
