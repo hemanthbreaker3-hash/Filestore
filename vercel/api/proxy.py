@@ -62,7 +62,13 @@ def proxy(path: str):
     query_string = original_query
     if query_string:
         target += "?" + query_string
-    headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() not in {"host", "content-length"}}
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP and k.lower() not in {"host", "content-length", "accept-encoding"}}
+    # Ask the Render backend for an uncompressed body. If Vercel's incoming
+    # Accept-Encoding (for example br/zstd) is forwarded, requests may not
+    # decode that encoding but this proxy strips Content-Encoding; the browser
+    # then displays compressed bytes as replacement characters. Identity avoids
+    # that mismatch and keeps HTML/JSON verification responses readable.
+    headers["Accept-Encoding"] = "identity"
     try:
         upstream = requests.request(method=request.method, url=target, params=None,
                                     data=request.get_data(), headers=headers,
