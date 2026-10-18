@@ -14,11 +14,34 @@
                 .then(data => { if (data && data.url) preloadedShortlink = data.url; })
                 .catch(() => {});
         }
-        function handleVerifyProceed(event) {
-            if (preloadedShortlink) {
-                event.preventDefault();
-                window.location.href = preloadedShortlink;
+        async function handleVerifyProceed(event) {
+            event.preventDefault();
+            const button = event.target.querySelector('button[type="submit"]');
+            const original = button.textContent;
+            button.disabled = true;
+            button.textContent = 'Checking session…';
+            try {
+                const response = await fetch('/api/frontend-verify', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({token: tokenKey})
+                });
+                const result = await response.json();
+                if (!response.ok || !result.ok) {
+                    button.textContent = 'Session not started — reopen verification';
+                    button.disabled = false;
+                    return;
+                }
+                if (preloadedShortlink) {
+                    window.location.replace(preloadedShortlink);
+                } else {
+                    window.location.href = '/go_shortener?token=' + encodeURIComponent(tokenKey) + '&st=' + encodeURIComponent(shortSt);
+                }
+            } catch (_) {
+                button.textContent = 'Session not started — try again';
+                button.disabled = false;
             }
+            if (button.disabled) button.textContent = original;
         }
     </script>
     <style>

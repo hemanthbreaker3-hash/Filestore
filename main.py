@@ -8,6 +8,9 @@ import sys
 import time
 import traceback
 import urllib.parse
+import secrets
+import hmac
+import hashlib
 from threading import Thread
 
 import hydrogram
@@ -21,7 +24,7 @@ import hydrogram.raw.types
 import hydrogram.types
 import pyrogram.utils
 import requests
-from flask import Flask, jsonify, redirect, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session
 from hydrogram.parser.html import Parser
 from hydrogram.raw import types as raw_types
 
@@ -142,6 +145,18 @@ from pyrogram.errors import FloodWait
 pyrogram.utils.MIN_CHANNEL_ID = -1009147483647
 
 app = Flask(__name__)
+# Configure a stable, deployment-provided signing secret. Never use a public/default key.
+app.secret_key = os.environ.get("SESSION_SECRET_KEY", "").strip()
+if not app.secret_key:
+    app.secret_key = secrets.token_urlsafe(48)
+    app.logger.warning("SESSION_SECRET_KEY is unset; sessions will reset when this process restarts.")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=1800,
+    MAX_CONTENT_LENGTH=1024 * 1024,
+)
 
 def is_supported_chrome_browser(user_agent: str) -> bool:
     """
@@ -178,6 +193,50 @@ def is_explicit_bot_or_scraper(user_agent: str) -> bool:
         return True
     return not is_supported_chrome_browser(user_agent)
 
+def _signed_session_marker(token_key: str, session_id: str) -> str:
+    """Opaque HMAC marker binds a verification attempt to its browser session."""
+    payload = f"{token_key}:{session_id}".encode("utf-8")
+    return hmac.new(app.secret_key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
+def _bypass_response(reason: str, token_key: str = "", target: str = ""):
+    # Target is displayed only as escaped text by Jinja; never redirect to it.
+    sid = str(session.get("verification_session") or "")
+    if not sid:
+        sid = secrets.token_urlsafe(32)
+        session["verification_session"] = sid
+    marker = _signed_session_marker(target[:500], sid) if target else ""
+    base = request.url_root.rstrip("/")
+    detected_url = (base + "/bypass-detected?" + urllib.parse.urlencode({
+        "target": target[:500], "hash": marker, "session": sid[:100]
+    })) if marker else ""
+    return render_template("bypass_detected.html", reason=reason,
+                           detected_url=detected_url, target=target[:500]), 403
+
+
+def _looks_like_bookmarklet_or_script() -> bool:
+    """Reject obvious bookmarklet/script probes on verification endpoints."""
+    ua = (request.headers.get("User-Agent") or "").lower()
+    if "javascript:" in request.url.lower() or "data:text/html" in request.url.lower():
+        return True
+    if request.headers.get("Sec-Fetch-Mode", "").lower() == "navigate" and "javascript:" in request.args.get("url", "").lower():
+        return True
+    return any(x in ua for x in ("headlesschrome", "phantomjs", "selenium", "playwright", "puppeteer"))
+
+
+@app.get("/bypass-detected")
+def bypass_detected():
+    token_key = (request.args.get("target") or "")[:500]
+    sid = (request.args.get("session") or "")[:100]
+    supplied = (request.args.get("hash") or "")[:128]
+    expected = _signed_session_marker(token_key, sid) if token_key and sid else ""
+    if not expected or not hmac.compare_digest(supplied, expected):
+        return "Invalid security event URL.", 403
+    return render_template("bypass_detected.html",
+                           reason="A verification bypass attempt was detected. Access was not granted.",
+                           detected_url="", target=token_key), 403
+
+
 @app.route('/')
 def hello_world():
     return 'AniZoneFlix'
@@ -204,8 +263,18 @@ def verify_frontend(full_token=None, subpath=None):
         return 'Verification link expired or invalid.', 403
 
     short_st = request.args.get('st', '')
+    # Bind the flow to this browser session; the signed Flask cookie is HttpOnly.
+    if session.get("verification_token") != token_key or not session.get("verification_session"):
+        session.clear()
+        session["verification_token"] = token_key
+        session["verification_session"] = secrets.token_urlsafe(32)
+        session.permanent = True
 
     # One consistent, lightweight template for all users and devices.
+    # Frontend step is required before the backend/shortener-return step can grant access.
+    session['frontend_verification_started'] = True
+    session.pop('frontend_verification_passed', None)
+    session.pop('backend_verification_passed', None)
     return render_template('verify.html', token=token_key, short_st=short_st)
 
 @app.route('/go_shortener')
@@ -312,12 +381,36 @@ def get_shortener_url():
         print(f'Error in /api/get_shortener_url: {type(err).__name__}: {err}')
         return jsonify({'error': 'verification service temporarily unavailable'}), 503
 
+@app.route('/api/frontend-verify', methods=['POST'])
+def verify_frontend_step():
+    """Record the explicit frontend confirmation in the same signed browser session."""
+    payload = request.get_json(silent=True) or request.form
+    token_key = str(payload.get('token') or '').strip()
+    if set(request.args.keys()) - set():
+        return jsonify({'ok': False, 'error': 'Unknown query parameters', 'status': 'session not started'}), 400
+    if not token_key or session.get('verification_token') != token_key or not session.get('verification_session'):
+        return jsonify({'ok': False, 'error': 'Verification session is missing or mismatched', 'status': 'session not started'}), 403
+    try:
+        token_doc = run_async(db.get_verify_token(token_key))
+    except Exception:
+        return jsonify({'ok': False, 'error': 'Verification service unavailable', 'status': 'session not started'}), 503
+    if not token_doc:
+        return jsonify({'ok': False, 'error': 'Verification token expired', 'status': 'session not started'}), 403
+    session['frontend_verification_passed'] = True
+    session['frontend_verified_at'] = int(time.time())
+    return jsonify({'ok': True, 'status': 'frontend verified'})
+
+
 @app.route('/api/verify', methods=['GET', 'POST'])
 def verify_backend():
     """Validate shortener return, grant timed access, then send user back to Telegram."""
     token_key = (request.values.get('token') or '').strip()
     short_st = (request.values.get('st') or token_key).strip()
     sid = (request.values.get('sid') or '').strip()
+    allowed_verify_keys = {"token", "st", "sid"}
+    unknown_keys = set(request.values.keys()) - allowed_verify_keys
+    if unknown_keys:
+        return _bypass_response("Unknown query parameters were rejected.", token_key, request.path)
     if not token_key:
         token_key = short_st
     if not token_key:
@@ -327,6 +420,19 @@ def verify_backend():
         token_doc = run_async(db.get_verify_token(token_key))
         if not token_doc:
             return 'This verification link has expired or is invalid. Please request a new link from Telegram.', 403
+        if _looks_like_bookmarklet_or_script():
+            return _bypass_response("Bookmarklet, headless browser, or script-like request detected.", token_key, request.path)
+        # Both stages must be completed in the same signed browser session.
+        browser_token = str(session.get("verification_token") or "")
+        browser_sid = str(session.get("verification_session") or "")
+        if browser_token != token_key or not browser_sid:
+            return _bypass_response("Verification session is missing or does not match. Reopen the original link from Telegram.", token_key, request.path)
+        if not session.get('frontend_verification_started') or not session.get('frontend_verification_passed'):
+            return render_template('bypass_detected.html', reason='Frontend verification was not completed. Session not started.'), 403
+        frontend_age = int(time.time()) - int(session.get('frontend_verified_at') or 0)
+        if frontend_age < 0 or frontend_age > 600:
+            session.pop('frontend_verification_passed', None)
+            return render_template('bypass_detected.html', reason='Frontend verification expired. Session not started; reopen the original link.'), 403
         user_id = int(token_doc.get('user_id') or 0)
         username = token_doc.get('username') or ''
         # A selected shortener can independently require its HTTP Referer header.
@@ -351,14 +457,28 @@ def verify_backend():
         bot_username = str(bot_config.get('BOT_USERNAME') or '').lstrip('@')
         bot_dest = f'https://t.me/{bot_username}?start=verify_{token_key}' if bot_username else 'https://t.me/'
         expire_sec = int(run_async(db.get_config_val('VERIFY_EXPIRE_SECONDS', 86400)) or 86400)
-        if user_id > 0:
-            run_async(db.set_user_verified(user_id, duration_seconds=expire_sec))
-            run_async(db.update_verify_token(token_key, {'web_verified': True}))
+        if user_id <= 0:
+            return render_template('bypass_detected.html', reason='User session could not be validated. Session not started.'), 403
+        run_async(db.set_user_verified(user_id, duration_seconds=expire_sec))
+        run_async(db.update_verify_token(token_key, {'web_verified': True, 'backend_verification_passed': True}))
+        session['backend_verification_passed'] = True
         return render_template('verify_success.html', redirect_url=bot_dest, animation_url='https://files.catbox.moe/5scyd0.gif')
     except Exception as err:
         print(f'Verification backend failed for token {token_key[:8]}…: {type(err).__name__}: {err}')
         return ('Verification could not be completed because the service is temporarily unavailable. '
                 'Please return to Telegram and request a new link if this continues.'), 503
+
+
+
+@app.after_request
+def apply_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault("Content-Security-Policy", "default-src 'self' https: data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+    response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 
 def start_uptime_monitor():

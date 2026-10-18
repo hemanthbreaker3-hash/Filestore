@@ -29,6 +29,12 @@
                 <li>Try again directly from your Telegram application.</li>
             </ul>
         </div>
+        {% if target %}
+        <p style="margin-top:16px;overflow-wrap:anywhere"><strong>Rejected target:</strong> {{ target }}</p>
+        {% endif %}
+        {% if detected_url %}
+        <p style="margin-top:12px"><a rel="nofollow noopener" href="{{ detected_url }}">View signed security event</a></p>
+        {% endif %}
     </div>
 </body>
 </html>

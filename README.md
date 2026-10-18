@@ -144,3 +144,7 @@ Use this branding for project-facing messages and documentation. Keep technical 
 
 **Important:** a bot's ID in your app database (or your user ID in the bot's `/admins` list) does not grant Telegram administrator permissions. `/fsubcheck` checks Telegram's actual role for the exact bot account currently running. Add that bot to the channel/supergroup and promote it to administrator. For private channels, ensure the configured numeric chat ID is correct. Telegram 400 errors such as `PeerIdInvalid` or `ChatAdminRequired` must be resolved at the Telegram chat/access level; the bot cannot grant itself permissions.
 
+
+
+## Verification security hardening
+Set `SESSION_SECRET_KEY` to a long random secret in your deployment environment (for example, generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"`). This signs the browser session cookie and signed bypass-event URLs. Keep it private and stable across restarts/instances. Verification now binds the browser session to the token, rejects unknown verification query parameters and obvious bookmarklet/headless requests, and emits security headers. User-Agent checks are only a signal and are not sufficient by themselves to prove automation.
