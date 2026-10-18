@@ -185,13 +185,24 @@ def is_supported_chrome_browser(user_agent: str) -> bool:
     ]
     return any(token in ua for token in valid_tokens)
 
+def is_chrome_only(user_agent: str) -> bool:
+    """Require actual Chrome for the interactive verification page.
+
+    Edge/Opera may include Chromium tokens, so exclude them explicitly.
+    User-Agent checks are a compatibility gate, not a security proof.
+    """
+    ua = (user_agent or "").lower()
+    if not ua or any(x in ua for x in ("edg/", "edga/", "edgios/", "opr/", "opera", "samsungbrowser", "firefox", "fxios", "crios")):
+        return False
+    return "chrome/" in ua and "chromium/" not in ua and "headlesschrome" not in ua
+
 def is_legitimate_browser(user_agent: str) -> bool:
     return is_supported_chrome_browser(user_agent)
 
 def is_explicit_bot_or_scraper(user_agent: str) -> bool:
-    if not user_agent:
-        return True
-    return not is_supported_chrome_browser(user_agent)
+    # Verification is intentionally Chrome-only; this is a compatibility check,
+    # not proof of identity because User-Agent headers can be spoofed.
+    return not is_chrome_only(user_agent)
 
 def _signed_session_marker(token_key: str, session_id: str) -> str:
     """Opaque HMAC marker binds a verification attempt to its browser session."""
@@ -262,6 +273,19 @@ def verify_frontend(full_token=None, subpath=None):
     if not token_doc:
         return 'Verification link expired or invalid.', 403
 
+    user_agent = request.headers.get("User-Agent", "")
+    if not is_chrome_only(user_agent):
+        # Browsers cannot be forced to launch another app; provide a user-initiated
+        # Chrome intent on Android and clear instructions elsewhere.
+        current_url = request.url
+        parsed = urllib.parse.urlsplit(current_url)
+        android_intent = "intent://" + parsed.netloc + parsed.path
+        if parsed.query:
+            android_intent += "?" + parsed.query
+        android_intent += "#Intent;scheme=" + (parsed.scheme or "https") + ";package=com.android.chrome;end"
+        return render_template("chrome_required.html", current_url=current_url,
+                               android_intent=android_intent), 200
+
     short_st = request.args.get('st', '')
     # Bind the flow to this browser session; the signed Flask cookie is HttpOnly.
     if session.get("verification_token") != token_key or not session.get("verification_session"):
@@ -273,6 +297,8 @@ def verify_frontend(full_token=None, subpath=None):
     # One consistent, lightweight template for all users and devices.
     # Frontend step is required before the backend/shortener-return step can grant access.
     session['frontend_verification_started'] = True
+    session.permanent = True
+    session.modified = True
     session.pop('frontend_verification_passed', None)
     session.pop('backend_verification_passed', None)
     return render_template('verify.html', token=token_key, short_st=short_st)
@@ -415,6 +441,8 @@ def verify_frontend_step():
     session['verification_tab_id'] = tab_id
     session['frontend_verification_passed'] = True
     session['frontend_verified_at'] = int(time.time())
+    session.permanent = True
+    session.modified = True
     return jsonify({'ok': True, 'status': 'frontend verified'})
 
 
@@ -472,8 +500,9 @@ def verify_backend():
                 if not referer_host or not configured_host or (referer_host != configured_host and not referer_host.endswith('.' + configured_host)):
                     return render_template('bypass_detected.html', reason='Required shortener referrer was missing or invalid.'), 403
         if is_explicit_bot_or_scraper(user_agent):
-            # Do not ban based on User-Agent alone; it is spoofable and creates false positives.
-            return render_template('bypass_detected.html', reason='Please open this verification link in a normal browser.'), 403
+            # Do not grant access in a different browser; start again from the
+            # original Telegram link in Chrome so the session cookie is present.
+            return render_template('bypass_detected.html', reason='Chrome is required. Open the original verification link in Google Chrome and start again; session not started.'), 403
         bot_config = run_async(db.get_config()) or {}
         bot_username = str(bot_config.get('BOT_USERNAME') or '').lstrip('@')
         bot_dest = f'https://t.me/{bot_username}?start=verify_{token_key}' if bot_username else 'https://t.me/'
