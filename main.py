@@ -24,7 +24,7 @@ import hydrogram.raw.types
 import hydrogram.types
 import pyrogram.utils
 import requests
-from flask import Flask, jsonify, redirect, render_template, request, session
+from flask import Flask, g, jsonify, redirect, render_template, request, session
 from hydrogram.parser.html import Parser
 from hydrogram.raw import types as raw_types
 
@@ -144,7 +144,7 @@ from pyrogram.errors import FloodWait
 
 pyrogram.utils.MIN_CHANNEL_ID = -1009147483647
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="web/templates")
 # Configure a stable, deployment-provided signing secret. Never use a public/default key.
 app.secret_key = os.environ.get("SESSION_SECRET_KEY", "").strip()
 if not app.secret_key:
@@ -152,7 +152,9 @@ if not app.secret_key:
     app.logger.warning("SESSION_SECRET_KEY is unset; sessions will reset when this process restarts.")
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SECURE=True,
+    # Secure cookies are required in production HTTPS. Set SESSION_COOKIE_SECURE=false
+    # only for local HTTP development.
+    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "true").strip().lower() not in {"0", "false", "no", "off"},
     SESSION_COOKIE_SAMESITE="Lax",
     PERMANENT_SESSION_LIFETIME=1800,
     MAX_CONTENT_LENGTH=1024 * 1024,
@@ -321,7 +323,7 @@ def go_shortener():
 
     # Keep this status page intentionally static: no spinner, no animated dots,
     # and no repeated/continuous animation. The API pre-generates/caches the link.
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Redirecting</title><style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#090a0f;color:#fff;font:16px Arial,sans-serif}}main{{text-align:center;padding:28px;border-radius:16px;background:#191a24}}p{{color:#c4c4cc}}</style></head><body><main><h2>Redirecting, please wait</h2><p>Preparing your verification link.</p></main><script>fetch('/api/get_shortener_url?'+new URLSearchParams({{token:{json.dumps(token_key)},st:{json.dumps(short_st)},tab_id:{json.dumps(tab_id)}}})).then(r=>r.json()).then(d=>{{if(d&&d.url)location.replace(d.url);else{{document.querySelector('main p').textContent='Unable to generate a verification link. Please return to Telegram and try again.';}}}}).catch(()=>{{document.querySelector('main p').textContent='Verification service unavailable. Please return to Telegram and try again.';}})</script></body></html>"""
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Redirecting</title><style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#090a0f;color:#fff;font:16px Arial,sans-serif}}main{{text-align:center;padding:28px;border-radius:16px;background:#191a24}}p{{color:#c4c4cc}}</style></head><body><main><h2>Redirecting, please wait</h2><p>Preparing your verification link.</p></main><script nonce="{g.csp_nonce}">fetch('/api/get_shortener_url?'+new URLSearchParams({{token:{json.dumps(token_key)},st:{json.dumps(short_st)},tab_id:{json.dumps(tab_id)}}})).then(r=>r.json()).then(d=>{{if(d&&d.url)location.replace(d.url);else{{document.querySelector('main p').textContent='Unable to generate a verification link. Please return to Telegram and try again.';}}}}).catch(()=>{{document.querySelector('main p').textContent='Verification service unavailable. Please return to Telegram and try again.';}})</script></body></html>"""
 
 @app.route('/api/get_shortener_url')
 def get_shortener_url():
@@ -489,6 +491,8 @@ def verify_backend():
             return render_template('bypass_detected.html', reason='Chrome is required. Open the original verification link in Google Chrome and start again; session not started.'), 403
         bot_config = run_async(db.get_config()) or {}
         bot_username = str(bot_config.get('BOT_USERNAME') or '').lstrip('@')
+        if not re.fullmatch(r'[A-Za-z0-9_]{5,32}', bot_username):
+            bot_username = ''
         bot_dest = f'https://t.me/{bot_username}?start=verify_{token_key}' if bot_username else 'https://t.me/'
         expire_sec = int(run_async(db.get_config_val('VERIFY_EXPIRE_SECONDS', 86400)) or 86400)
         if user_id <= 0:
@@ -504,13 +508,31 @@ def verify_backend():
 
 
 
+@app.before_request
+def set_request_security_nonce():
+    # A fresh nonce permits only the inline scripts explicitly marked by templates.
+    g.csp_nonce = secrets.token_urlsafe(18)
+
+
+@app.context_processor
+def inject_template_security_nonce():
+    return {"csp_nonce": getattr(g, "csp_nonce", "")}
+
+
 @app.after_request
 def apply_security_headers(response):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    response.headers.setdefault("Content-Security-Policy", "default-src 'self' https: data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        f"script-src 'self' 'nonce-{getattr(g, 'csp_nonce', '')}' https:; "
+        "style-src 'self' 'unsafe-inline' https:; "
+        "img-src 'self' https: data:; font-src 'self' https: data:; "
+        "connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    )
     response.headers.setdefault("Cache-Control", "no-store")
     return response
 
