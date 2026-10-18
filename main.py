@@ -294,13 +294,10 @@ def verify_frontend(full_token=None, subpath=None):
         session["verification_session"] = secrets.token_urlsafe(32)
         session.permanent = True
 
-    # One consistent, lightweight template for all users and devices.
-    # Frontend step is required before the backend/shortener-return step can grant access.
-    session['frontend_verification_started'] = True
+    # Initialize the flow only. Authorization is decided by the backend callback.
+    session['verification_flow_started_at'] = int(time.time())
     session.permanent = True
     session.modified = True
-    session.pop('frontend_verification_passed', None)
-    session.pop('backend_verification_passed', None)
     return render_template('verify.html', token=token_key, short_st=short_st)
 
 @app.route('/go_shortener')
@@ -320,10 +317,7 @@ def go_shortener():
 
     short_st = request.args.get('st', '') or token_key
     tab_id = (request.args.get('tab_id') or '').strip()
-    expected_tab_id = str(session.get('verification_tab_id') or '')
-    if (not tab_id or not expected_tab_id
-            or not hmac.compare_digest(tab_id, expected_tab_id)):
-        return render_template('bypass_detected.html', reason='This is not the tab that started verification. Session not started — reopen the original link in the same tab.'), 403
+    # Carry tab metadata to the shortlink; authorization is checked after callback.
 
     # Keep this status page intentionally static: no spinner, no animated dots,
     # and no repeated/continuous animation. The API pre-generates/caches the link.
@@ -335,13 +329,10 @@ def get_shortener_url():
         token_key = (request.args.get('token') or '').strip()
         short_st = (request.args.get('st') or token_key).strip()
         tab_id = (request.args.get('tab_id') or '').strip()
-        if (not token_key or session.get('verification_token') != token_key
-                or not session.get('verification_session')
-                or not session.get('frontend_verification_started')
-                or not session.get('frontend_verification_passed')):
-            return jsonify({'error': 'session not started'}), 403
-        if not tab_id or not hmac.compare_digest(tab_id, str(session.get('verification_tab_id') or '')):
-            return jsonify({'error': 'session not started'}), 403
+        if not token_key:
+            return jsonify({'error': 'missing token'}), 400
+        if not re.fullmatch(r'[A-Za-z0-9_-]{20,100}', tab_id):
+            return jsonify({'error': 'invalid tab identifier'}), 400
         base_url = str(run_async(db.get_config_val('BASE_URL', 'https://your-render-service.onrender.com'))).rstrip('/')
         verify_endpoint = base_url + '/api/verify?' + urllib.parse.urlencode({'token': token_key, 'st': short_st, 'tab_id': tab_id})
         if not token_key:
@@ -417,35 +408,29 @@ def get_shortener_url():
         print(f'Error in /api/get_shortener_url: {type(err).__name__}: {err}')
         return jsonify({'error': 'verification service temporarily unavailable'}), 503
 
-@app.route('/api/frontend-verify', methods=['POST'])
-def verify_frontend_step():
-    """Record the explicit frontend confirmation in the same signed browser session."""
+@app.route('/api/register-tab', methods=['POST'])
+def register_verification_tab():
+    """Record tab metadata for later backend comparison; this does not verify access."""
     payload = request.get_json(silent=True) or request.form
     token_key = str(payload.get('token') or '').strip()
+    tab_id = str(payload.get('tab_id') or '').strip()
     if request.args:
-        return jsonify({'ok': False, 'error': 'Unexpected query parameters', 'status': 'session not started'}), 400
-    origin = request.headers.get('Origin')
-    if origin:
-        expected_origin = request.host_url.rstrip('/')
-        if origin.rstrip('/') != expected_origin:
-            return jsonify({'ok': False, 'error': 'Origin mismatch', 'status': 'session not started'}), 403
+        return jsonify({'ok': False, 'error': 'Unexpected query parameters'}), 400
     if not token_key or session.get('verification_token') != token_key or not session.get('verification_session'):
-        return jsonify({'ok': False, 'error': 'Verification session is missing or mismatched', 'status': 'session not started'}), 403
+        return jsonify({'ok': False, 'error': 'Verification flow is not initialized'}), 403
+    if not re.fullmatch(r'[A-Za-z0-9_-]{20,100}', tab_id):
+        return jsonify({'ok': False, 'error': 'Invalid tab identifier'}), 400
     try:
         token_doc = run_async(db.get_verify_token(token_key))
     except Exception:
-        return jsonify({'ok': False, 'error': 'Verification service unavailable', 'status': 'session not started'}), 503
+        return jsonify({'ok': False, 'error': 'Verification service unavailable'}), 503
     if not token_doc:
-        return jsonify({'ok': False, 'error': 'Verification token expired', 'status': 'session not started'}), 403
-    tab_id = str(payload.get('tab_id') or '').strip()
-    if not re.fullmatch(r'[A-Za-z0-9_-]{20,100}', tab_id):
-        return jsonify({'ok': False, 'error': 'Tab session missing', 'status': 'session not started'}), 403
+        return jsonify({'ok': False, 'error': 'Verification token expired'}), 403
     session['verification_tab_id'] = tab_id
-    session['frontend_verification_passed'] = True
-    session['frontend_verified_at'] = int(time.time())
+    session['verification_tab_registered_at'] = int(time.time())
     session.permanent = True
     session.modified = True
-    return jsonify({'ok': True, 'status': 'frontend verified'})
+    return jsonify({'ok': True})
 
 
 @app.route('/api/verify', methods=['GET', 'POST'])
@@ -475,33 +460,29 @@ def verify_backend():
         browser_sid = str(session.get("verification_session") or "")
         if browser_token != token_key or not browser_sid:
             return _bypass_response("Verification session is missing or does not match. Reopen the original link from Telegram.", token_key, request.path)
-        if not session.get('frontend_verification_started') or not session.get('frontend_verification_passed'):
-            return render_template('bypass_detected.html', reason='Frontend verification was not completed. Session not started.'), 403
+        flow_started = int(session.get('verification_flow_started_at') or 0)
+        if flow_started <= 0 or int(time.time()) - flow_started > 600:
+            return render_template('bypass_detected.html', reason='Verification flow expired. Session not started — reopen the original link.'), 403
         expected_tab_id = str(session.get('verification_tab_id') or '')
-        if (not tab_id or not expected_tab_id
-                or not hmac.compare_digest(tab_id, expected_tab_id)):
-            return render_template('bypass_detected.html', reason='This is not the tab that started verification. Session not started — reopen the original link in the same tab.'), 403
-        frontend_age = int(time.time()) - int(session.get('frontend_verified_at') or 0)
-        if frontend_age < 0 or frontend_age > 600:
-            session.pop('frontend_verification_passed', None)
-            return render_template('bypass_detected.html', reason='Frontend verification expired. Session not started; reopen the original link.'), 403
+        if (not tab_id or not expected_tab_id or not hmac.compare_digest(tab_id, expected_tab_id)):
+            return render_template('bypass_detected.html', reason='Browser tab does not match the started verification flow. Access blocked.'), 403
         user_id = int(token_doc.get('user_id') or 0)
         username = token_doc.get('username') or ''
-        # A selected shortener can independently require its HTTP Referer header.
+        # Referer enforcement is optional per shortener. When disabled, do not
+        # reject callbacks merely because browsers/providers omit Referer.
         selected_id = str(token_doc.get('selected_shortener_id') or sid)
-        if selected_id:
-            configured = run_async(db.get_shorteners()) or []
-            selected = next((item for item in configured if str(item.get('_id')) == selected_id), None)
-            if selected and selected.get('referer_enabled', False):
-                referer = request.headers.get('Referer', '')
-                referer_host = (urllib.parse.urlsplit(referer).hostname or '').lower()
-                configured_domain = str(selected.get('domain', '')).strip()
-                if not configured_domain.startswith(('http://', 'https://')):
-                    configured_domain = 'https://' + configured_domain
-                configured_host = (urllib.parse.urlsplit(configured_domain).hostname or '').lower()
-                # Browsers and shorteners may omit Referer; strict mode intentionally rejects that.
-                if not referer_host or not configured_host or (referer_host != configured_host and not referer_host.endswith('.' + configured_host)):
-                    return render_template('bypass_detected.html', reason='Required shortener referrer was missing or invalid.'), 403
+        configured = run_async(db.get_shorteners()) or []
+        selected = next((item for item in configured if selected_id and str(item.get('_id')) == selected_id), None)
+        if selected and bool(selected.get('referer_enabled', False)):
+            referer = request.headers.get('Referer', '')
+            referer_host = (urllib.parse.urlsplit(referer).hostname or '').lower()
+            configured_domain = str(selected.get('domain', '')).strip()
+            if not configured_domain.startswith(('http://', 'https://')):
+                configured_domain = 'https://' + configured_domain
+            configured_host = (urllib.parse.urlsplit(configured_domain).hostname or '').lower()
+            if (not referer_host or not configured_host or
+                    (referer_host != configured_host and not referer_host.endswith('.' + configured_host))):
+                return render_template('bypass_detected.html', reason='Shortlink referer is missing or does not match this verification flow.'), 403
         if is_explicit_bot_or_scraper(user_agent):
             # Do not grant access in a different browser; start again from the
             # original Telegram link in Chrome so the session cookie is present.
@@ -514,7 +495,7 @@ def verify_backend():
             return render_template('bypass_detected.html', reason='User session could not be validated. Session not started.'), 403
         run_async(db.set_user_verified(user_id, duration_seconds=expire_sec))
         run_async(db.update_verify_token(token_key, {'web_verified': True, 'backend_verification_passed': True}))
-        session['backend_verification_passed'] = True
+        session['verification_completed_at'] = int(time.time())
         return render_template('verify_success.html', redirect_url=bot_dest, animation_url='https://files.catbox.moe/5scyd0.gif')
     except Exception as err:
         print(f'Verification backend failed for token {token_key[:8]}…: {type(err).__name__}: {err}')

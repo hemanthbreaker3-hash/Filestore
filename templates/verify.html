@@ -141,8 +141,8 @@
         </div>
     </div>
     <script>
-    // This script only supplies a per-tab identifier. All trust decisions and
-    // comparisons are performed by the backend using the signed Flask session.
+    // UI/navigation only: provide tab metadata. Authorization checks run on the backend
+    // after the shortlink callback.
     (async function () {
         const button = document.getElementById('verify-button');
         const status = document.getElementById('session-status');
@@ -157,20 +157,19 @@
                 sessionStorage.setItem('filestore_verification_tab_id', tabId);
             }
             tabField.value = tabId;
-            const response = await fetch('/api/frontend-verify', {
+            const response = await fetch('/api/register-tab', {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: {'Content-Type': 'application/json', 'X-Requested-With': 'fetch'},
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({token: tokenField.value, tab_id: tabId})
             });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok || !result.ok) throw new Error(result.status || result.error || 'Session not started');
-            status.textContent = 'Secure session ready. Continue in this same tab.';
-            button.textContent = 'Click here to confirm';
+            if (!response.ok) throw new Error('Tab metadata could not be registered');
+            status.textContent = 'Ready. Continue to the shortlink in this tab.';
+            button.textContent = 'Continue to verification';
             button.disabled = false;
         } catch (error) {
-            status.textContent = 'Session not started — reopen the original verification link from Telegram in this tab.';
-            button.textContent = 'Session not started';
+            status.textContent = 'Could not initialize this verification page. Reopen the original link and try again.';
+            button.textContent = 'Retry verification';
             button.disabled = true;
         }
     })();
