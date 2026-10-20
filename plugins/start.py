@@ -2,6 +2,7 @@ import asyncio
 import os
 import random
 import secrets
+import sqlite3
 import sys
 import time
 import urllib.parse
@@ -102,6 +103,36 @@ async def start_command(client: Client, message: Message):
             await db.add_user(user_id)
         except Exception:
             pass
+
+    # API_CLIENT_REQUEST_TRACKING: only accept token_<bot> if that bot recently registered this user.
+    if len(message.text.split()) > 1 and message.text.split()[1].startswith("token_"):
+        client_bot = message.text.split(maxsplit=1)[1][6:].strip().lstrip("@").lower()
+        if not client_bot or not all(ch.isalnum() or ch == "_" for ch in client_bot):
+            return await message.reply_text("❌ Invalid verification request. Return to the original bot and try again.")
+        request_db_path = os.environ.get("VERIFY_API_DB_PATH", os.path.join(os.path.dirname(os.path.dirname(__file__)), "verify_api.sqlite3"))
+        try:
+            with sqlite3.connect(request_db_path, timeout=10) as con:
+                con.row_factory = sqlite3.Row
+                con.execute("CREATE TABLE IF NOT EXISTS verification_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, bot_username TEXT NOT NULL, created_at INTEGER NOT NULL)")
+                registered = con.execute("SELECT 1 FROM verification_requests WHERE user_id=? AND bot_username=? AND created_at>=? ORDER BY created_at DESC LIMIT 1", (user_id, client_bot, int(time.time()) - 1800)).fetchone()
+        except Exception:
+            registered = None
+        if not registered:
+            return await message.reply_text("⚠️ No recent API request was found for this account. Return to the original bot and tap Verify again.")
+        if await db.is_user_verified(user_id):
+            verified_doc = await db.get_verified_user(user_id) or {}
+            expiry = verified_doc.get("expire_at")
+            expiry_text = expiry.strftime("%Y-%m-%d %H:%M UTC") if hasattr(expiry, "strftime") else "not available"
+            return await message.reply_text(f"✅ <b>You are already verified.</b>\n\nYour access is valid until <code>{expiry_text}</code>. Return to @{client_bot}; no verification button is needed.")
+        token = secrets.token_urlsafe(24)
+        expiry_seconds = int(await db.get_config_val("SESSION_EXPIRE_SECONDS", 3000) or 3000)
+        await db.save_verify_token(token, user_id, f"token_{client_bot}", expiry_seconds=expiry_seconds)
+        base_url = str(await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")).rstrip("/")
+        return await message.reply_text(
+            f"<b>🔐 Verification required for @{client_bot}</b>\n\nComplete the full browser + shortener verification flow below. If your access is already valid, you will not be asked again.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Verify Access", url=f"{base_url}/v/{token}?st={token}", style="primary")]]),
+            disable_web_page_preview=True
+        )
 
     # Check if returning from verification: /start verify_<token>
     if len(message.text.split()) > 1 and message.text.split()[1].startswith("verify_"):

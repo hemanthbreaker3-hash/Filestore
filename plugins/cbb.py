@@ -417,7 +417,7 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
         shorteners = await db.get_shorteners() or []
         buttons = []
         if shorteners:
-            text = "<b>🧭 Shortener Referrer Protection</b>\n\nToggle referrer enforcement independently for each configured shortener. When enabled, the verification return must include a matching Referer header. Some shorteners/browsers suppress this header, so test each provider before enabling.\n\n"
+            text = "<b>🧭 Per-Shortener Referer Protection</b>\n\nEach configured shortener has its own independent switch. 🟢 ON requires the browser callback Referer host to match that shortener's configured domain; 🔴 OFF skips only the Referer check for that shortener. The remaining token, browser-session, tab, and expiry checks still apply. New shorteners default to OFF. Some providers/browsers omit Referer, so test before enabling.\n\n"
             for item in shorteners:
                 enabled = bool(item.get('referer_enabled', False))
                 text += f"• <b>{item.get('domain', 'Unknown')}</b>: {'🟢 ON' if enabled else '🔴 OFF'}\n"

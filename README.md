@@ -81,6 +81,13 @@ The `vercel/` directory provides a small landing page and path-preserving proxy.
 
 If the Vercel domain is used for user-facing links, ensure the backend's `BASE_URL` and the generated callback URLs consistently use the intended public domain. Do not mix Render and Vercel origins in the same flow unless the proxy forwards cookies and callback paths correctly.
 
+## Per-shortener Referer ON/OFF settings
+
+1. Open `/panel` as an admin and choose **🧭 Referer Settings**, or open **🔗 Shorteners**.
+2. Each configured shortener has its own **Enable/Disable** Referer button. Settings are stored on that shortener record in MongoDB and persist across restarts.
+3. **ON** checks that the verification callback's `Referer` hostname matches the selected shortener's configured hostname. **OFF** skips only that Referer check; the normal signed-token, browser session, tab, and expiry validation still runs.
+4. Newly added shorteners default to **OFF** because some providers and browser privacy settings suppress Referer headers. Enable it per provider only after testing the complete flow.
+
 ## Verification flow
 
 1. User opens the frontend verification page.
@@ -129,3 +136,33 @@ For local HTTP only, set `SESSION_COOKIE_SECURE=false`; restore it to `true` in 
 - Keep the service on HTTPS in production.
 - Review logs before enabling verbose logging in a public deployment; do not log tokens or session cookies.
 - A successful syntax check is not equivalent to a full production security audit. Test the actual browser → shortener → callback → Telegram flow after each deployment.
+
+
+## External Telegram bot verification API (full FileStore verification flow)
+
+An integrating bot should call `POST /api/request` before sending the returned deep link. Set `CLIENT_API_KEY` on the FileStore service and send it in `X-API-Key` when you want to protect request registration. The user opens the returned `https://t.me/<bot>?start=token_<client_bot_username>` link. FileStore checks that a request for that Telegram user and client bot was registered in the previous 30 minutes. It then sends the same browser session + shortener flow used by FileStore itself. The browser callback grants timed verification only after the existing flow validates the token/session/tab/shortener callback.
+
+- `POST /api/request` JSON: `{"user_id": 123456789, "bot_username": "Naya_Leech_Bot"}`; optional header `X-API-Key`.
+- `GET /api/<user_id>` returns `verified`, `status`, `verified_until`, and `expires_in`.
+- `GET /api/request-status/<user_id>?bot_username=Naya_Leech_Bot` checks request registration and status.
+- `POST /admin/set-status` can set or revoke access with JSON `{"user_id":123456789,"verified":true,"admin_key":"..."}`; configure `ADMIN_API_KEY`.
+- `VERIFY_API_DB_PATH` optionally selects the SQLite path for request tracking; use persistent storage in deployment.
+
+Example (Python):
+```python
+import requests
+API = "https://your-filestore.onrender.com"
+response = requests.post(
+    API + "/api/request",
+    json={"user_id": user_id, "bot_username": "Naya_Leech_Bot"},
+    headers={"X-API-Key": "YOUR_CLIENT_API_KEY"}, timeout=10,
+)
+response.raise_for_status()
+verify_link = response.json()["start_link"]
+# Send verify_link to the user as an inline keyboard URL button.
+
+status = requests.get(f"{API}/api/{user_id}", timeout=10).json()
+if status.get("verified"):
+    # Allow access; do not show the verification button while unexpired.
+    pass
+```

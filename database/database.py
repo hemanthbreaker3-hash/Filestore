@@ -384,7 +384,10 @@ class Rohit:
             'api_key': api_key,
             'method': method,
             'priority': priority,
-            'enabled': True
+            'enabled': True,
+            # Each shortener has an independent Referer-enforcement switch.
+            # Default OFF to avoid breaking providers/browsers that omit Referer.
+            'referer_enabled': False
         })
         return shortener_id
 
