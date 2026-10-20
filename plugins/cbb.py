@@ -244,11 +244,17 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
         from helper_func import get_readable_time
         expire_sec = await db.get_config_val("VERIFY_EXPIRE_SECONDS", 86400)
         session_sec = await db.get_config_val("SESSION_EXPIRE_SECONDS", 3000)
+        verify_mode = await db.get_config_val("VERIFY_MODE", "shortener")
+        mode_label = "🤖 External Verify Bot API" if verify_mode == "verifybot" else "🌐 Normal Shortener Verification"
+        verify_bot_username = (await db.get_config_val("VERIFY_BOT_USERNAME", "") or "").strip().lstrip("@")
+        verify_bot_display = f"@{verify_bot_username}" if verify_bot_username else "<i>Not set — configure with /verifyapi</i>"
         exp_time_str = get_readable_time(int(expire_sec))
         sess_time_str = get_readable_time(int(session_sec)) if session_sec > 0 else "Permanent (0s)"
 
         btn = [
             [InlineKeyboardButton(f"Toggle Status ({'DISABLE' if status else 'ENABLE'})", callback_data=toggle_action, style="danger" if status else "success")],
+            [InlineKeyboardButton("🔁 Switch Verification Mode", callback_data="panel_toggle_verify_mode", style="primary")],
+            [InlineKeyboardButton("🔌 Configure Verify Bot API (/verifyapi)", callback_data="panel_verify_api_help", style="primary")],
             [InlineKeyboardButton("🌐 Set / Change Base URL", callback_data="panel_set_base_url", style="primary")],
             [InlineKeyboardButton("⏱️ Set Verified Access Duration", callback_data="panel_set_verify_expire", style="primary")],
             [InlineKeyboardButton("⌛ Set Session Link Expiry", callback_data="panel_set_session_expire", style="primary")],
@@ -257,12 +263,39 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
         text = (
             "<b>🛡️ Verification System</b>\n\n"
             f"<b>• Status:</b> {status_str}\n"
+            f"<b>• Mode:</b> {mode_label}\n"
+            f"<b>• Verify API:</b> <code>{await db.get_config_val('VERIFY_API_URL', 'Not configured')}</code>\n"
+            f"<b>• Verify Bot Username:</b> {verify_bot_display}\n"
             f"<b>• Verified Access Duration:</b> <code>{exp_time_str}</code> ({expire_sec}s)\n"
             f"<b>• Session Link Expiry:</b> <code>{sess_time_str}</code> ({session_sec}s)\n"
             f"<b>• Base URL:</b> <code>{await db.get_config_val('BASE_URL', 'https://your-render-service.onrender.com')}</code>\n\n"
             "<i>Redirects unverified users through shorteners before granting file access.</i>"
         )
         return await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(btn))
+
+    elif data == "panel_toggle_verify_mode":
+        current_mode = await db.get_config_val("VERIFY_MODE", "shortener")
+        if current_mode == "verifybot":
+            await db.update_config("VERIFY_MODE", "shortener")
+            await query.answer("Normal shortener verification selected")
+        else:
+            api_url = await db.get_config_val("VERIFY_API_URL", None)
+            if not api_url:
+                await query.answer("Run /verifyapi first to configure the API", show_alert=True)
+                return
+            await db.update_config("VERIFY_MODE", "verifybot")
+            await query.answer("External Verify Bot API selected")
+        return await panel_callback_handler(client, query)
+
+    elif data == "panel_verify_api_help":
+        await query.answer()
+        await query.message.reply_text(
+            "<b>🔌 Verify Bot API Setup</b>\n\nRun <code>/verifyapi</code> and send: "
+            "<code>https://your-api.onrender.com | YOUR_CLIENT_API_KEY</code>.\n"
+            "Leave off the <code>| API_KEY</code> part if your API has no client key.\n"
+            "After saving, use <b>Switch Verification Mode</b> to choose Verify Bot or normal shorteners."
+        )
+        return
 
     elif data == "panel_toggle_verify":
         curr = await db.get_config_val("VERIFY_ENABLED", False)
@@ -417,7 +450,7 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
         shorteners = await db.get_shorteners() or []
         buttons = []
         if shorteners:
-            text = "<b>🧭 Per-Shortener Referer Protection</b>\n\nEach configured shortener has its own independent switch. 🟢 ON requires the browser callback Referer host to match that shortener's configured domain; 🔴 OFF skips only the Referer check for that shortener. The remaining token, browser-session, tab, and expiry checks still apply. New shorteners default to OFF. Some providers/browsers omit Referer, so test before enabling.\n\n"
+            text = "<b>🧭 Shortener Referrer Protection</b>\n\nToggle referrer enforcement independently for each configured shortener. When enabled, the verification return must include a matching Referer header. Some shorteners/browsers suppress this header, so test each provider before enabling.\n\n"
             for item in shorteners:
                 enabled = bool(item.get('referer_enabled', False))
                 text += f"• <b>{item.get('domain', 'Unknown')}</b>: {'🟢 ON' if enabled else '🔴 OFF'}\n"

@@ -2,7 +2,6 @@ import asyncio
 import os
 import random
 import secrets
-import sqlite3
 import sys
 import time
 import urllib.parse
@@ -29,6 +28,36 @@ from pyrogram.types import (
 )
 
 BAN_SUPPORT = f"{BAN_SUPPORT}"
+
+
+async def _verify_api_request(method, url, api_key=None, **kwargs):
+    """Run short HTTP API calls without blocking Pyrogram's event loop."""
+    headers = dict(kwargs.pop("headers", {}) or {})
+    if api_key:
+        headers["X-API-Key"] = api_key
+    if headers:
+        kwargs["headers"] = headers
+    def _request():
+        response = requests.request(method, url, timeout=8, **kwargs)
+        response.raise_for_status()
+        return response.json()
+    return await asyncio.to_thread(_request)
+
+
+async def _external_verify_status(api_url, api_key, user_id, bot_username):
+    # Verified status is authoritative and includes its expiry decision. Request registration
+    # is performed before generating the link, so a valid verified user is not forced to
+    # repeat verification just because the short-lived request record has expired.
+    base = api_url.rstrip("/")
+    data = await _verify_api_request("GET", f"{base}/api/{int(user_id)}", api_key)
+    return bool(data.get("verified", data.get("is_verified", False)))
+
+
+async def _external_verify_link(api_url, api_key, user_id, bot_username):
+    base = api_url.rstrip("/")
+    payload = {"user_id": int(user_id), "bot_username": bot_username}
+    data = await _verify_api_request("POST", f"{base}/api/request", api_key, json=payload)
+    return data.get("start_link") or data.get("verify_url") or data.get("url")
 
 
 async def _send_verification_log(client, user, verified_at, expire_at, event="VERIFIED"):
@@ -104,36 +133,6 @@ async def start_command(client: Client, message: Message):
         except Exception:
             pass
 
-    # API_CLIENT_REQUEST_TRACKING: only accept token_<bot> if that bot recently registered this user.
-    if len(message.text.split()) > 1 and message.text.split()[1].startswith("token_"):
-        client_bot = message.text.split(maxsplit=1)[1][6:].strip().lstrip("@").lower()
-        if not client_bot or not all(ch.isalnum() or ch == "_" for ch in client_bot):
-            return await message.reply_text("❌ Invalid verification request. Return to the original bot and try again.")
-        request_db_path = os.environ.get("VERIFY_API_DB_PATH", os.path.join(os.path.dirname(os.path.dirname(__file__)), "verify_api.sqlite3"))
-        try:
-            with sqlite3.connect(request_db_path, timeout=10) as con:
-                con.row_factory = sqlite3.Row
-                con.execute("CREATE TABLE IF NOT EXISTS verification_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, bot_username TEXT NOT NULL, created_at INTEGER NOT NULL)")
-                registered = con.execute("SELECT 1 FROM verification_requests WHERE user_id=? AND bot_username=? AND created_at>=? ORDER BY created_at DESC LIMIT 1", (user_id, client_bot, int(time.time()) - 1800)).fetchone()
-        except Exception:
-            registered = None
-        if not registered:
-            return await message.reply_text("⚠️ No recent API request was found for this account. Return to the original bot and tap Verify again.")
-        if await db.is_user_verified(user_id):
-            verified_doc = await db.get_verified_user(user_id) or {}
-            expiry = verified_doc.get("expire_at")
-            expiry_text = expiry.strftime("%Y-%m-%d %H:%M UTC") if hasattr(expiry, "strftime") else "not available"
-            return await message.reply_text(f"✅ <b>You are already verified.</b>\n\nYour access is valid until <code>{expiry_text}</code>. Return to @{client_bot}; no verification button is needed.")
-        token = secrets.token_urlsafe(24)
-        expiry_seconds = int(await db.get_config_val("SESSION_EXPIRE_SECONDS", 3000) or 3000)
-        await db.save_verify_token(token, user_id, f"token_{client_bot}", expiry_seconds=expiry_seconds)
-        base_url = str(await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")).rstrip("/")
-        return await message.reply_text(
-            f"<b>🔐 Verification required for @{client_bot}</b>\n\nComplete the full browser + shortener verification flow below. If your access is already valid, you will not be asked again.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Verify Access", url=f"{base_url}/v/{token}?st={token}", style="primary")]]),
-            disable_web_page_preview=True
-        )
-
     # Check if returning from verification: /start verify_<token>
     if len(message.text.split()) > 1 and message.text.split()[1].startswith("verify_"):
         token = message.text.split()[1].split("verify_", 1)[1]
@@ -182,10 +181,46 @@ async def start_command(client: Client, message: Message):
             await _notify_security_event(client, message.from_user, "Invalid, expired, or mismatched verification token")
             return await message.reply_text("<b>❌ Verification link invalid or expired. Please try again.</b>")
 
+    # Optional external verification-manager API mode. A currently verified user is
+    # allowed through without seeing another verification button; expiry is decided by the API.
+    if (not await db.is_premium_user(user_id)) and (not await db.is_user_verified(user_id)) and len(message.text.split()) > 1:
+        verify_mode = await db.get_config_val("VERIFY_MODE", "shortener")
+        if verify_mode == "verifybot":
+            payload = message.text.split(maxsplit=1)[1]
+            api_url = await db.get_config_val("VERIFY_API_URL", None)
+            api_key = await db.get_config_val("VERIFY_API_KEY", None)
+            if not api_url:
+                return await message.reply_text("<b>⚠️ Verify Bot API is not configured.</b> Please contact the bot admin.")
+            # Premium/local verified users do not need an external verification button.
+            try:
+                me = await client.get_me()
+                already_verified = await _external_verify_status(api_url, api_key, user_id, me.username or "")
+            except Exception as api_exc:
+                LOGGER(__name__).warning("External verification API status check failed: %s", api_exc)
+                return await message.reply_text(
+                    "<b>⚠️ Verification service temporarily unavailable.</b>\n\nPlease try again in a moment. "
+                    "If this continues, contact @anizoneflix."
+                )
+            if not already_verified:
+                try:
+                    verify_link = await _external_verify_link(api_url, api_key, user_id, me.username or "")
+                except Exception as api_exc:
+                    LOGGER(__name__).warning("External verification API request failed: %s", api_exc)
+                    verify_link = None
+                if not verify_link:
+                    return await message.reply_text("<b>⚠️ Could not create a verification link.</b> Please contact the bot admin.")
+                return await message.reply_text(
+                    "<b>🛡️ Verification Required</b>\n\n"
+                    "Verify once with the verification bot. If your access is still valid, this button will not be shown again.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🤖 Verify Access", url=verify_link, style="primary")]]),
+                    disable_web_page_preview=True
+                )
+
     # Enforce Shortener Verification if enabled (Bypassed for Premium users)
     if not await db.is_premium_user(user_id):
         verify_enabled = await db.get_config_val("VERIFY_ENABLED", False)
-        if verify_enabled and len(message.text.split()) > 1:
+        active_verify_mode = await db.get_config_val("VERIFY_MODE", "shortener")
+        if verify_enabled and active_verify_mode != "verifybot" and len(message.text.split()) > 1:
             if not await db.is_user_verified(user_id):
                 import uuid
                 payload = message.text.split(maxsplit=1)[1]
@@ -231,6 +266,29 @@ async def start_command(client: Client, message: Message):
         clone_cids = [c['db_channel_id'] for c in clones if c.get('db_channel_id')]
 
         all_candidate_channels = [target_db_id, CHANNEL_ID] + await db.get_db_channels() + clone_cids
+        # Filter invalid/duplicate IDs and check channel access before selecting a source.
+        validated_channels = []
+        seen_channels = set()
+        for candidate in all_candidate_channels:
+            try:
+                candidate = int(candidate)
+                if candidate == 0 or candidate in seen_channels:
+                    continue
+                await client.get_chat(candidate)
+                validated_channels.append(candidate)
+                seen_channels.add(candidate)
+            except Exception as channel_exc:
+                LOGGER(__name__).warning(
+                    "Skipping inaccessible/invalid file DB channel %r: %s: %s",
+                    candidate, type(channel_exc).__name__, channel_exc
+                )
+        all_candidate_channels = validated_channels
+        if not all_candidate_channels:
+            return await message.reply_text(
+                "<b>❌ File database channel is invalid or inaccessible.</b>\n\n"
+                "The admin must check <code>CHANNEL_ID</code>, add this bot to the channel, "
+                "and grant permission to access its messages. Contact @anizoneflix if needed."
+            )
 
         if len(argument) in (2, 3):
             val1 = int(argument[1])
@@ -238,7 +296,7 @@ async def start_command(client: Client, message: Message):
 
             matched_channel_id = None
             for cid in all_candidate_channels:
-                if cid and val1 % abs(cid) == 0:
+                if cid and abs(cid) > 0 and val1 % abs(cid) == 0:
                     matched_channel_id = cid
                     break
 
@@ -262,7 +320,17 @@ async def start_command(client: Client, message: Message):
             raw_messages = await get_messages(client, ids, chat_id=matched_channel_id)
             messages = [m for m in raw_messages if m and not getattr(m, "empty", False) and getattr(m, "id", None)]
         except Exception as e:
-            await message.reply_text(f"<b><blockquote>❌ An error occurred while retrieving files: {e}</blockquote></b>")
+            if "CHANNEL_INVALID" in str(e) or "channels.GetChannels" in str(e):
+                friendly_error = (
+                    "<b>❌ Telegram rejected the file database channel.</b>\n\n"
+                    "The stored file link points to an invalid or inaccessible channel. "
+                    "The admin should verify <code>CHANNEL_ID</code>, confirm the bot is a member/admin, "
+                    "and regenerate links if they were created using a different channel. "
+                    "This is a channel configuration issue, not a user verification issue."
+                )
+                await message.reply_text(friendly_error)
+            else:
+                await message.reply_text(f"<b><blockquote>❌ An error occurred while retrieving files: {e}</blockquote></b>")
             print(f"Error getting messages: {e}")
             return
         finally:

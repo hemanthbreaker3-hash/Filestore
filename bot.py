@@ -181,6 +181,7 @@ class Bot(Client):
                 BotCommand("retrieve_off", "ᴅɪsᴀʙʟᴇs ᴛʜᴇ ᴅᴇʟᴇᴛɪᴏɴ ᴀʟᴇʀᴛ ᴍᴇssᴀɢᴇ"),
                 BotCommand("panel", "ᴏᴘᴇɴs ᴛʜᴇ ᴀɴɪᴢᴏɴᴇғʟɪx ᴄᴏɴᴛʀᴏʟ ᴘᴀɴᴇʟ"),
                 BotCommand("verify", "ᴠᴇʀɪғʏ ᴏʀ ᴇxᴛᴇɴᴅ ʏᴏᴜʀ ᴀᴄᴄᴇss ᴠᴇʀɪғɪᴄᴀᴛɪᴏɴ"),
+                BotCommand("verifyapi", "configure external Verify Bot API (admin)"),
                 BotCommand("count", "sʜᴏᴡs ᴠᴇʀɪғɪᴇᴅ ᴜsᴇʀs ʀᴇᴘᴏʀᴛ"),
                 BotCommand("addpremium", "ᴀᴅᴅs ᴀ ᴘʀᴇᴍɪᴜᴍ ᴜsᴇʀ"),
                 BotCommand("delpremium", "ʀᴇᴍᴏᴠᴇs ᴀ ᴘʀᴇᴍɪᴜᴍ ᴜsᴇʀ"),

@@ -23,7 +23,7 @@ def build_panel_menu():
     buttons = [
         [InlineKeyboardButton("⚙️ Core Config", callback_data="panel_core", style="primary"), InlineKeyboardButton("👥 Admin Manager", callback_data="panel_admins", style="primary")],
         [InlineKeyboardButton("🗄️ DB Channels", callback_data="panel_db_channels", style="primary"), InlineKeyboardButton("📢 Force Sub", callback_data="panel_fsub", style="primary")],
-        [InlineKeyboardButton("🛡️ Verification", callback_data="panel_verify", style="primary"), InlineKeyboardButton("🧾 Verify Log", callback_data="panel_verify_log", style="primary")],
+        [InlineKeyboardButton("🛡️ Verification Settings", callback_data="panel_verify", style="primary"), InlineKeyboardButton("🔛 Verification Switch", callback_data="panel_toggle_verify", style="success"), InlineKeyboardButton("🧾 Verify Log", callback_data="panel_verify_log", style="primary")],
         [InlineKeyboardButton("🔗 Shorteners", callback_data="panel_shortener", style="primary")],
         [InlineKeyboardButton("🤖 Clone Bots", callback_data="panel_clones", style="primary"), InlineKeyboardButton("🖼️ Images", callback_data="panel_images", style="primary")],
         [InlineKeyboardButton("🔘 Custom Button", callback_data="panel_custom_btn", style="primary"), InlineKeyboardButton("📊 Statistics", callback_data="panel_stats", style="primary")],
@@ -263,6 +263,53 @@ async def verify_log_command(client: Client, message: Message):
 
 
 # ==================== Verification Direct Commands ====================
+@Bot.on_message(filters.command("verifyapi") & filters.private)
+async def verify_api_command(client: Client, message: Message):
+    """Configure the external verification-manager API for this FileStore bot."""
+    if not await check_admin_or_owner(message):
+        return
+    await message.reply_text(
+        "<b>🔌 Configure Verify Bot API</b>\n\n"
+        "First set the public API Base URL in the Verify Bot using /panel → Set API Base URL. Then send that same URL here, plus the optional client API key and Verify Bot username (one line):\n"
+        "<code>https://your-api.onrender.com | YOUR_CLIENT_API_KEY | @YourVerifyBot</code>\n\n"
+        "If the API does not require a key, use <code>https://your-api.onrender.com | | @YourVerifyBot</code>. The API URL must be the Verify Bot service public base URL, not the Telegram bot link. The username must match the deployed Verify Bot.\n"
+        "The service must support <code>POST /api/request</code>, <code>GET /api/{user_id}</code>, "
+        "and <code>GET /api/request-status/{user_id}?bot_username=...</code>.\n\n"
+        "Send <code>/cancel</code> to abort.\n"
+        "<i>Example:</i> <code>https://verify.example.com | abc123 | @YourVerifyBot</code>"
+    )
+    try:
+        response = await client.listen(message.chat.id, timeout=120)
+    except asyncio.TimeoutError:
+        return await message.reply_text("⌛ API setup timed out. Run /verifyapi again.")
+    raw = (response.text or "").strip()
+    if raw.lower() == "/cancel":
+        return await response.reply_text("❌ API setup cancelled.")
+    parts = [part.strip() for part in raw.split("|")]
+    api_url = parts[0].rstrip("/")
+    api_key = parts[1] if len(parts) > 1 else ""
+    verify_bot_username = parts[2].strip().lstrip("@") if len(parts) > 2 else ""
+    if verify_bot_username and not re.fullmatch(r"[A-Za-z0-9_]{5,32}", verify_bot_username):
+        return await response.reply_text("❌ Invalid verification bot username. Use @YourVerifyBot or run /verifyapi again.")
+    from urllib.parse import urlsplit
+    parsed = urlsplit(api_url)
+    if parsed.scheme not in ("https", "http") or not parsed.netloc:
+        return await response.reply_text("❌ Invalid API URL. Please use a complete http(s) URL and run /verifyapi again.")
+    await db.update_config("VERIFY_API_URL", api_url)
+    await db.update_config("VERIFY_API_KEY", api_key or None)
+    await db.update_config("VERIFY_BOT_USERNAME", verify_bot_username or None)
+    await db.update_config("VERIFY_MODE", "verifybot")
+    saved_url = await db.get_config_val("VERIFY_API_URL", None)
+    if saved_url != api_url:
+        return await response.reply_text("❌ Could not confirm the API URL was saved. Check MongoDB and retry.")
+    await response.reply_text(
+        f"<b>✅ Verify Bot API saved.</b>\n\n<b>API:</b> <code>{api_url}</code>\n"
+        f"<b>Verify Bot Username:</b> {'@' + verify_bot_username if verify_bot_username else '<i>Not set</i>'}\n"
+        "<b>Mode:</b> Verify Bot\n\nUse /panel → Verification Settings to switch between Verify Bot and the normal shortener flow.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛡️ Verification Panel", callback_data="panel_verify", style="primary")]])
+    )
+
+
 @Bot.on_message(filters.command("verify_on") & filters.private)
 async def verify_on_command(client: Client, message: Message):
     if not await check_admin_or_owner(message):

@@ -1,7 +1,6 @@
 import asyncio
 import concurrent.futures
 import json
-import sqlite3
 import os
 import random
 import re
@@ -254,109 +253,6 @@ def bypass_detected():
 @app.route('/')
 def hello_world():
     return 'AniZoneFlix'
-
-
-def _verification_api_db():
-    """Small persistent store for third-party bot request tracking."""
-    path = os.environ.get("VERIFY_API_DB_PATH", str(os.path.join(os.path.dirname(__file__), "verify_api.sqlite3")))
-    connection = sqlite3.connect(path, timeout=10)
-    connection.row_factory = sqlite3.Row
-    connection.execute("CREATE TABLE IF NOT EXISTS verification_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, bot_username TEXT NOT NULL, created_at INTEGER NOT NULL)")
-    connection.commit()
-    return connection
-
-
-def _verification_api_key_ok():
-    expected = (os.environ.get("CLIENT_API_KEY") or "").strip()
-    supplied = (request.headers.get("X-API-Key") or "").strip()
-    return not expected or hmac.compare_digest(expected, supplied)
-
-
-@app.route('/api/request', methods=['POST'])
-def api_create_verification_request():
-    """Register the requesting client bot before it sends a Telegram deep link."""
-    if not _verification_api_key_ok():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    body = request.get_json(silent=True) or {}
-    try:
-        user_id = int(body.get("user_id", 0))
-    except (TypeError, ValueError):
-        user_id = 0
-    bot_name = str(body.get("bot_username") or "").strip().lstrip("@").lower()
-    if user_id <= 0 or not re.fullmatch(r"[a-z0-9_]{5,32}", bot_name):
-        return jsonify({"ok": False, "error": "user_id and valid bot_username are required"}), 400
-    now = int(time.time())
-    con = _verification_api_db()
-    con.execute("INSERT INTO verification_requests(user_id, bot_username, created_at) VALUES(?,?,?)", (user_id, bot_name, now))
-    con.commit(); con.close()
-    cfg = run_async(db.get_config()) or {}
-    bot_username = str(cfg.get("BOT_USERNAME") or os.environ.get("VERIFY_BOT_USERNAME") or "").strip().lstrip("@")
-    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", bot_username):
-        bot_username = ""
-    start_link = f"https://t.me/{bot_username}?start=token_{bot_name}" if bot_username else None
-    return jsonify({"ok": True, "user_id": user_id, "bot_username": bot_name, "start_link": start_link, "expires_in": 1800})
-
-
-@app.route('/api/<int:user_id>', methods=['GET'])
-def api_verification_status(user_id):
-    if user_id <= 0:
-        return jsonify({"error": "user_id must be positive"}), 400
-    try:
-        is_verified = bool(run_async(db.is_user_verified(user_id)))
-        doc = run_async(db.get_verified_user(user_id)) if is_verified else None
-        expire_at = (doc or {}).get("expire_at")
-        if expire_at and getattr(expire_at, "tzinfo", None) is not None:
-            expire_at = expire_at.replace(tzinfo=None)
-        until = int(expire_at.timestamp()) if expire_at else None
-        now = int(time.time())
-        return jsonify({"user_id": user_id, "verified": is_verified, "is_verified": is_verified,
-                        "status": "verified" if is_verified else "not_verified",
-                        "verified_until": until, "expires_in": max(0, until-now) if until else 0})
-    except Exception:
-        app.logger.exception("Verification status API failed")
-        return jsonify({"error": "verification service temporarily unavailable"}), 503
-
-
-@app.route('/api/request-status/<int:user_id>', methods=['GET'])
-def api_verification_request_status(user_id):
-    bot_name = str(request.args.get("bot_username") or "").strip().lstrip("@").lower()
-    if user_id <= 0 or not re.fullmatch(r"[a-z0-9_]{5,32}", bot_name):
-        return jsonify({"error": "positive user_id and bot_username are required"}), 400
-    now = int(time.time())
-    con = _verification_api_db()
-    row = con.execute("SELECT created_at FROM verification_requests WHERE user_id=? AND bot_username=? AND created_at>=? ORDER BY created_at DESC LIMIT 1", (user_id, bot_name, now-1800)).fetchone()
-    con.close()
-    try:
-        is_verified = bool(run_async(db.is_user_verified(user_id)))
-        doc = run_async(db.get_verified_user(user_id)) if is_verified else None
-        expire_at = (doc or {}).get("expire_at")
-        if expire_at and getattr(expire_at, "tzinfo", None) is not None: expire_at = expire_at.replace(tzinfo=None)
-        until = int(expire_at.timestamp()) if expire_at else None
-    except Exception:
-        is_verified, until = False, None
-    return jsonify({"user_id": user_id, "bot_username": bot_name, "requested": bool(row),
-                    "request_expires_in": max(0, int(row["created_at"])+1800-now) if row else 0,
-                    "verified": is_verified, "is_verified": is_verified,
-                    "status": "verified" if is_verified else "not_verified", "verified_until": until})
-
-
-@app.route('/admin/set-status', methods=['POST'])
-def api_admin_set_verification_status():
-    expected = (os.environ.get("ADMIN_API_KEY") or "").strip()
-    body = request.get_json(silent=True) or {}
-    if not expected or not hmac.compare_digest(str(body.get("admin_key") or ""), expected):
-        return jsonify({"error": "unauthorized"}), 401
-    try: user_id = int(body.get("user_id", 0))
-    except (TypeError, ValueError): user_id = 0
-    verified = bool(body.get("verified", True))
-    if user_id <= 0: return jsonify({"error": "invalid user_id"}), 400
-    if verified:
-        duration = int(run_async(db.get_config_val("VERIFY_EXPIRE_SECONDS", 86400)) or 86400)
-        run_async(db.set_user_verified(user_id, duration_seconds=duration))
-    else:
-        awaitable = db.database['verified_users'].delete_one({'_id': user_id})
-        run_async(awaitable)
-    return jsonify({"user_id": user_id, "verified": verified, "status": "verified" if verified else "not_verified"})
 
 @app.route('/v/<path:full_token>')
 @app.route('/verify')

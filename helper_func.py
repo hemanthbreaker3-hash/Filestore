@@ -138,8 +138,12 @@ async def get_messages(client, message_ids, chat_id=None):
                     message_ids=temb_ids
                 )
             except Exception as e2:
+                if "CHANNEL_INVALID" in str(e2) or "channels.GetChannels" in str(e2):
+                    raise
                 print(f"Error fetching messages in batch after FloodWait: {e2}")
         except Exception as e:
+            if "CHANNEL_INVALID" in str(e) or "channels.GetChannels" in str(e):
+                raise
             print(f"Error fetching messages in batch: {e}")
 
         if msgs:
