@@ -455,6 +455,8 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
                 enabled = bool(item.get('referer_enabled', False))
                 text += f"• <b>{item.get('domain', 'Unknown')}</b>: {'🟢 ON' if enabled else '🔴 OFF'}\n"
                 buttons.append([InlineKeyboardButton(f"{'🟢 Disable' if enabled else '🔴 Enable'} — {item.get('domain', 'Shortener')}", callback_data=f"panel_toggle_ref_{item['_id']}", style="success" if not enabled else "danger")])
+                hdr_on = bool(item.get('header_protection_enabled', False))
+                buttons.append([InlineKeyboardButton(f"🛡️ Headers: {'ON' if hdr_on else 'OFF'} — {item.get('domain', 'Shortener')}", callback_data=f"panel_toggle_hdr_{item['_id']}", style="success" if hdr_on else "primary")])
         else:
             text = "<b>🧭 Shortener Referrer Protection</b>\n\n<i>No shorteners configured yet. Add one with /addshortener.</i>"
         buttons.append([InlineKeyboardButton("‹ Back", callback_data="panel_main", style="primary")])
@@ -472,6 +474,8 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
                 buttons.append([InlineKeyboardButton(f"{'🔴 Turn OFF' if is_enabled else '🟢 Turn ON'} — {s['domain']}", callback_data=f"panel_toggle_short_{s['_id']}", style="danger" if is_enabled else "success")])
                 ref_on = bool(s.get('referer_enabled', False))
                 buttons.append([InlineKeyboardButton(f"🧭 Referrer: {'ON' if ref_on else 'OFF'} — {s['domain']}", callback_data=f"panel_toggle_ref_{s['_id']}", style="success" if ref_on else "primary")])
+                hdr_on = bool(s.get('header_protection_enabled', False))
+                buttons.append([InlineKeyboardButton(f"🛡️ Anti-bypass headers: {'ON' if hdr_on else 'OFF'} — {s['domain']}", callback_data=f"panel_toggle_hdr_{s['_id']}", style="success" if hdr_on else "primary")])
                 buttons.append([InlineKeyboardButton(f"🗑️ Delete {s['domain']}", callback_data=f"panel_del_short_{s['_id']}", style="danger")])
         else:
             text = "<b>🔗 Shortener Manager</b>\n\n<i>No shorteners configured. Use /addshortener to add one.</i>"
@@ -700,6 +704,19 @@ async def panel_callback_handler(client: Bot, query: CallbackQuery):
         await db.update_shortener(sid, {'referer_enabled': new_value})
         await query.answer(f"Referrer check {'enabled' if new_value else 'disabled'}", show_alert=True)
         query.data = "panel_referrer"
+        return await panel_callback_handler(client, query)
+
+    elif data.startswith("panel_toggle_hdr_"):
+        sid = data[len("panel_toggle_hdr_"):]
+        shorteners = await db.get_shorteners() or []
+        selected = next((item for item in shorteners if str(item.get('_id')) == sid), None)
+        if not selected:
+            await query.answer("Shortener not found", show_alert=True)
+            return
+        new_value = not bool(selected.get('header_protection_enabled', False))
+        await db.update_shortener(sid, {'header_protection_enabled': new_value})
+        await query.answer(f"Anti-bypass header policy {'enabled' if new_value else 'disabled'}", show_alert=True)
+        query.data = "panel_shortener"
         return await panel_callback_handler(client, query)
 
     elif data.startswith("panel_del_short_"):

@@ -346,8 +346,15 @@ def get_shortener_url():
         # Do not reuse cached shortlinks: each attempt must carry its own tab-bound callback.
         shorteners = run_async(db.get_shorteners()) or []
         active = [item for item in shorteners if item.get('enabled', True) and item.get('domain') and item.get('api_key')]
-        # Randomly select one configured active shortener per verification token.
-        random.shuffle(active)
+        # /verify N can pin a token to a configured shortener. Without a pin,
+        # preserve the normal randomized provider selection.
+        preferred_id = str(token_doc.get('preferred_shortener_id') or '')
+        if preferred_id:
+            active = [item for item in active if str(item.get('_id')) == preferred_id]
+            if not active:
+                return jsonify({'error': 'The selected shortener is no longer enabled or configured'}), 409
+        else:
+            random.shuffle(active)
         for shortener in active:
             domain = str(shortener.get('domain', '')).strip().rstrip('/')
             api_key = str(shortener.get('api_key', '')).strip()
@@ -399,7 +406,8 @@ def get_shortener_url():
                     short_url = urllib.parse.urlunsplit(parsed_short)
                     run_async(db.update_verify_token(token_key, {
                         'cached_shortlink': short_url,
-                        'selected_shortener_id': str(shortener.get('_id', ''))
+                        'selected_shortener_id': str(shortener.get('_id', '')),
+                        'selected_shortlink_host': (parsed_short.hostname or '').lower()
                     }))
                     return jsonify({'url': short_url})
                 except Exception as exc:
@@ -475,16 +483,35 @@ def verify_backend():
         selected_id = str(token_doc.get('selected_shortener_id') or sid)
         configured = run_async(db.get_shorteners()) or []
         selected = next((item for item in configured if selected_id and str(item.get('_id')) == selected_id), None)
+        if selected and bool(selected.get('header_protection_enabled', False)):
+            # Practical browser-header validation. Header checks are supplementary;
+            # the signed token + browser session/tab binding remain the real controls.
+            user_agent = (request.headers.get('User-Agent') or '').strip()
+            accept = (request.headers.get('Accept') or '').strip()
+            fetch_mode = (request.headers.get('Sec-Fetch-Mode') or '').strip().lower()
+            fetch_dest = (request.headers.get('Sec-Fetch-Dest') or '').strip().lower()
+            if not user_agent or not accept:
+                return render_template('bypass_detected.html', reason='Required browser headers are missing. Open the verification link in your normal browser.'), 403
+            if fetch_mode and fetch_mode not in ('navigate', 'cors', 'same-origin', 'no-cors'):
+                return render_template('bypass_detected.html', reason='Unexpected browser request headers detected.'), 403
+            if fetch_dest and fetch_dest not in ('document', 'empty', 'iframe'):
+                return render_template('bypass_detected.html', reason='Unexpected browser navigation headers detected.'), 403
         if selected and bool(selected.get('referer_enabled', False)):
+            # Compare against the actual generated short-link host, not the API
+            # endpoint configured in the panel (these are often different domains).
+            # Browsers/providers may omit Referer due to privacy policies, so a
+            # missing value must not reject an otherwise valid signed session.
             referer = request.headers.get('Referer', '')
-            referer_host = (urllib.parse.urlsplit(referer).hostname or '').lower()
-            configured_domain = str(selected.get('domain', '')).strip()
-            if not configured_domain.startswith(('http://', 'https://')):
-                configured_domain = 'https://' + configured_domain
-            configured_host = (urllib.parse.urlsplit(configured_domain).hostname or '').lower()
-            if (not referer_host or not configured_host or
-                    (referer_host != configured_host and not referer_host.endswith('.' + configured_host))):
-                return render_template('bypass_detected.html', reason='Shortlink referer is missing or does not match this verification flow.'), 403
+            referer_host = (urllib.parse.urlsplit(referer).hostname or '').lower().rstrip('.')
+            expected_host = str(token_doc.get('selected_shortlink_host') or '').lower().rstrip('.')
+            if not expected_host:
+                configured_domain = str(selected.get('domain', '')).strip()
+                if not configured_domain.startswith(('http://', 'https://')):
+                    configured_domain = 'https://' + configured_domain
+                expected_host = (urllib.parse.urlsplit(configured_domain).hostname or '').lower().rstrip('.')
+            if referer_host and expected_host and not (
+                    referer_host == expected_host or referer_host.endswith('.' + expected_host)):
+                return render_template('bypass_detected.html', reason='Shortlink referer does not match the generated verification link. Please reopen the link from Telegram.'), 403
         if is_explicit_bot_or_scraper(user_agent):
             # Do not grant access in a different browser; start again from the
             # original Telegram link in Chrome so the session cookie is present.

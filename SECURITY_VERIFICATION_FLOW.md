@@ -27,3 +27,7 @@ flowchart TD
 ## Important limitations
 
 Browser tab identifiers and Referer headers are supplemental signals, not cryptographic proof that a user stayed in one tab. Authorization relies on the signed server session, a short-lived verification token, and backend-side checks. Test the complete browser → shortener → callback → destination flow with each supported shortener before production use.
+
+
+## Per-shortener anti-bypass settings
+The Shorteners panel now exposes per-provider Referer enforcement and an Anti-bypass headers policy toggle for AroLinks, VPLink, and other configured providers. The existing verification callback continues to validate signed flow/session tokens; Referer enforcement compares the callback Referer host with the configured shortener host. HTTP headers such as User-Agent and Sec-Fetch-* are client-controlled hints and must not be treated as authentication. Do not reject provider callbacks based on arbitrary custom headers unless the provider documents that it sends them. For robust enforcement, use the signed, expiring verification token and server-side session validation.

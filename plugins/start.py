@@ -586,7 +586,29 @@ async def bcmd(bot: Bot, message: Message):
 @Bot.on_message(filters.command('verify') & filters.private)
 async def verify_command(client: Client, message: Message):
     user_id = message.from_user.id
-    import uuid
+    # Optional shortener selector: /verify 1 uses the first enabled shortener.
+    # Choosing a specific provider is restricted to the owner/admin or premium users;
+    # plain /verify remains available under the existing verification flow.
+    args = (message.text or "").split()[1:]
+    selected_shortener_id = None
+    if args:
+        if len(args) != 1 or not args[0].isdigit() or int(args[0]) < 1:
+            return await message.reply_text("<b>Usage:</b> <code>/verify</code> or <code>/verify 1</code>\nThe number selects a configured shortener by its position in the Shorteners panel.")
+        try:
+            owner_id = int(OWNER_ID) if OWNER_ID else 0
+        except (TypeError, ValueError):
+            owner_id = 0
+        is_authorized = user_id == owner_id or await db.is_premium_user(user_id)
+        if not is_authorized:
+            return await message.reply_text("<b>⛔ This option is available only to authorized users.</b>")
+        configured = await db.get_shorteners() or []
+        active = [item for item in configured if item.get('enabled', True) and item.get('domain') and item.get('api_key')]
+        active.sort(key=lambda item: (int(item.get('priority', 1) or 1), str(item.get('_id', ''))))
+        position = int(args[0]) - 1
+        if position >= len(active):
+            return await message.reply_text(f"<b>❌ Shortener {args[0]} is not configured or enabled.</b>\nUse <code>/shorteners</code> to view configured providers.")
+        selected_shortener_id = str(active[position].get('_id'))
+
     is_ver = await db.is_user_verified(user_id)
 
     rem_time_str = "None"
@@ -605,6 +627,8 @@ async def verify_command(client: Client, message: Message):
     short_token_id = secrets.token_urlsafe(24)
     sess_exp = await db.get_config_val("SESSION_EXPIRE_SECONDS", 3000)
     await db.save_verify_token(short_token_id, user_id, "verify-extend", expiry_seconds=int(sess_exp))
+    if selected_shortener_id:
+        await db.update_verify_token(short_token_id, {'preferred_shortener_id': selected_shortener_id})
 
     base_url = await db.get_config_val("BASE_URL", "https://your-render-service.onrender.com")
     base_url = base_url.rstrip("/")
@@ -612,10 +636,12 @@ async def verify_command(client: Client, message: Message):
 
     btn = [[InlineKeyboardButton("🚀 Verify / Extend Access Now", url=verify_link, style="primary")]]
     status_text = f"🟢 Currently Verified (Remaining: <code>{rem_time_str}</code>)" if is_ver else "🔴 Not Verified"
+    instruction = (f"<i>Click below to verify or extend your access using configured shortener #{args[0]}.</i>"
+                   if selected_shortener_id else "<i>Click the button below to verify or extend your active access period!</i>")
     await message.reply_text(
         f"<b>🛡️ Verification Center</b>\n\n"
         f"<b>• Your Status:</b> {status_text}\n\n"
-        "<i>Click the button below to verify or extend your active access period!</i>",
+        f"{instruction}",
         reply_markup=InlineKeyboardMarkup(btn),
         disable_web_page_preview=True
     )

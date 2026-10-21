@@ -384,7 +384,9 @@ class Rohit:
             'api_key': api_key,
             'method': method,
             'priority': priority,
-            'enabled': True
+            'enabled': True,
+            'referer_enabled': False,
+            'header_protection_enabled': False
         })
         return shortener_id
 
@@ -464,7 +466,7 @@ class Rohit:
                 'user_id': int(user_id), 'payload': payload, 'created_at': now,
                 'expires_at': now + timedelta(seconds=expiry), 'verified': False,
                 'cached_shortlink': None, 'selected_shortener_id': None,
-                'web_verified': False
+                'selected_shortlink_host': None, 'web_verified': False
             }},
             upsert=True
         )
