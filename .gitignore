@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+
+# Environment files may contain deployment secrets
+.env
+**/.env
+.venv/
+bot.log
+bot.pid
+filesharingbot.txt
+
+.git/
+*.pyo
+*.log
+node_modules/
