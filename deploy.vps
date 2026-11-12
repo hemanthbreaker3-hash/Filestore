@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Thin wrapper: same as one-click-deploy.sh (CDML-X style name)
+exec "$(cd "$(dirname "$0")" && pwd)/one-click-deploy.sh" "$@"
